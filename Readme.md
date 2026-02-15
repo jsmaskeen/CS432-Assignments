@@ -10,6 +10,8 @@
 
 ## SQL dump: [`dump.sql`](./dump.sql)
 
-## Reprot: TBD
+## Reprot: [`Report.pdf`](./Report.pdf)
 
-## ER DIagram:  |  [`ER.excalidraw`](./ER.excalidraw)
+## ER DIagram: [`ER.svg`](./ER.svg) |  [`ER.png`](./ER.png)
+
+## You can also view a zoomable version of ER diagram on [this link](https://jsmaskeen.github.io/CS432-Assignments).
