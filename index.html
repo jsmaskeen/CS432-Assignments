@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fullscreen SVG</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background: #ffffff; 
+            overflow: hidden;
+        }
+
+        .svg-container {
+            position: fixed;
+            inset: 0;
+        }
+
+        .svg-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; 
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="svg-container">
+    <img src="ER.svg" alt="SVG">
+</div>
+
+</body>
+</html>

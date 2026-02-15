@@ -12,4 +12,4 @@
 
 ## Reprot: TBD
 
-## ER DIagram: [`ER.excalidraw`](./ER.excalidraw)
+## ER DIagram:  |  [`ER.excalidraw`](./ER.excalidraw)
