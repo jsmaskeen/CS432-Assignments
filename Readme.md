@@ -10,7 +10,7 @@
 
 ## SQL dump: [`dump.sql`](./dump.sql)
 
-## Reprot: [`Report.pdf`](./Report.pdf)
+## Report: [`Report.pdf`](./Report.pdf)
 
 ## ER DIagram: [`ER.svg`](./ER.svg) |  [`ER.png`](./ER.png)
 
