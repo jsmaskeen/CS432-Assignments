@@ -5,7 +5,7 @@ Cab sharing portal made for students of IIT Gandhinagar, developed across four a
 
 ## Assignments:
 1. Assignment 1:
-    - [`Report`](./Assignment1_pdfs/Report.pdf)
+    - [`Report`](./PDFs/Report.pdf)
     - [`ER Diagram`](./ER-Diagrams/ER.png) ([High Quality Zoomable Version](https://jsmaskeen.github.io/CS432-Assignments))
     - [`SQL Dump`](./SQL-Dump/dump.sql)
 2. Assignment 2:
