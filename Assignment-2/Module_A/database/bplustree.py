@@ -230,20 +230,29 @@ class BPlusTree:
         leaf_node.keys.pop(leaf_idx)
         leaf_node.values.pop(leaf_idx)
 
-        # if key was present in internal nodes, we neeed to replace it with the new first key of this leaf
-        if len(nodes_having_key) > 1 and len(leaf_node.keys) > 0:
-            internal_key = leaf_node.keys[0]
-            for ancestor, anc_idx in nodes_having_key[:-1]:  # all except the leaf
-                ancestor.keys[anc_idx] = internal_key
-
         if leaf_node is self.root:
             return True
 
-        if len(leaf_node.keys) >= min_keys:
-            return True
+        # fix underflow, then fix stale spliiting keys (separator)
+        if len(leaf_node.keys) < min_keys:
+            self._fix_underflow(leaf_node, min_keys)
 
-        self._fix_underflow(leaf_node, min_keys)
+        self._fix_separator(key)
         return True
+
+    def _fix_separator(self, key: int):
+        # this is needed cause python stores references, and deleting later doesnt clearout those older stale references
+        node = self.root
+        while not node.leaf:
+            for i, k in enumerate(node.keys):
+                if k == key:
+                    child = node.children[i + 1]
+                    while not child.leaf:
+                        child = child.children[0]
+                    if child.keys:
+                        node.keys[i] = child.keys[0]
+                    return 
+            break
 
     def _fix_underflow(self, node: BPlusTreeNode, min_keys: int):
         # if node is root, the tree height will shrink
