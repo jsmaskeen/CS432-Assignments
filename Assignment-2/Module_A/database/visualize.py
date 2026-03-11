@@ -53,6 +53,7 @@ def visualize(bptree_root: BPlusTreeNode, degree: int):
             if node.next:
                 next_id = str(id(node.next))
                 dot.edge(node_id, next_id, constraint='false', color="blue", style="dashed") #type:ignore
+                dot.edge(next_id, node_id, constraint='false', color="teal", style="dashed") #type:ignore
             
         return node_id
 
