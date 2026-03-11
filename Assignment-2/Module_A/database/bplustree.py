@@ -156,29 +156,45 @@ class BPlusTree:
                 if len(parent.keys) >= self.degree:
                     self._split_node(parent)
 
+    def range_query(self, start_key: int, end_key: int):
+        # find the node where start key will be/just bigger than this, then trraverse the linked list
+        (cur, idx) = self._search(start_key, True)
+        result: List[Tuple[int, Dict[str, Any]]] = []
+        if idx is None:
+            idx = len(cur.keys)
+            for i, val in enumerate(cur.keys):
+                if val >= start_key:
+                    idx = i
+                    break
 
-# def insert(self, key, value):
-#     """
-#     Insert key-value pair into the B+ tree.
-#     Handle root splitting if necessary
-#     Maintain sorted order and balance properties.
-#     """
-#     pass
+        while cur is not None:
+            while idx < len(cur.keys):
+                k = cur.keys[idx]
+                if k > end_key:
+                    return result
+                result.append((k, cur.values[idx]))
+                idx += 1
 
+            cur = cur.next
+            idx = 0
 
-# def _insert_non_full(self, node, key, value):
-#     # Recursive helper to insert into a non-full node.
-#     # Split child nodes if they become full during insertion.
-#     pass
+        return result
 
+    def get_all(self):
+        #  need to find ledtmost leaf and traverse hrough the linked list.
+        cur = self.root
+        res: List[Tuple[int, Dict[str, Any]]] = []
+        while not cur.leaf:
+            if not cur.children:
+                return res
+            cur = cur.children[0]
 
-# def _split_child(self, parent, index):
-#     """
-#     Split the parentchild at the given index
-#     For leaves:preserve the linked list structure and copy the middle key to the parent.
-#     For internal nodes: promote the middle key and split the children
-#     """
-#     pass
+        while cur is not None:
+            for i in range(len(cur.keys)):
+                res.append((cur.keys[i], cur.values[i]))
+            cur = cur.next
+
+        return res
 
 
 # def delete(self, key):
@@ -194,44 +210,6 @@ class BPlusTree:
 # def _delete(self, node, key):
 #     # Recursive helper for deletion. Handle leaf and internal nodes .
 #     # Ensure all nodes maintain minimum keys after deletion.
-#     pass
-
-
-# def _fill_child(self, node, index):
-#     # Ensure child at given index has enough keys by borrowing from siblings or merging.
-#     pass
-
-
-# def _borrow_from_prev(self, node, index):
-#     # Borrow a key from the left sibling to prevent underflow.
-#     pass
-
-
-# def _borrow_from_next(self, node, index):
-#     # Borrow a key from the right sibling to prevent underflow
-#     pass
-
-
-# def _merge(self, node, index):
-#     # Merge child at index with its right sibling. Update parent keys
-#     pass
-
-
-# def update(self, key, new_value):
-#     # Update value associated with an existing key. Return True if successful.
-#     pass
-
-
-# def range_query(self, start_key, end_key):
-#     """
-#     Return all key-value pairs where start_key <= key <= end_key.
-#     Traverse leaf nodes using the following pointers for efficient range scans.
-#     """
-#     pass
-
-
-# def get_all(self):
-#     # Return all key-value pairs in the tree using in-order traversal.
 #     pass
 
 
