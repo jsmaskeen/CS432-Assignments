@@ -24,7 +24,7 @@ class Table:
         self.columns = columns
         self.primary_key = primary_key
 
-        self.tree:Union[BruteForceDB,BPlusTree] = BPlusTree(degree=degree) if indexer == 'bplus' else BruteForceDB()
+        self.tree:Union[BruteForceDB,BPlusTree] = BPlusTree(primary_key=self.primary_key,degree=degree) if indexer == 'bplus' else BruteForceDB()
 
     def _validate_row(self, row: Any):
         if not isinstance(row, dict):
