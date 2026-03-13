@@ -292,3 +292,50 @@ class PerformanceAnalyzer:
 
         self._write_csv("varying_degree.csv", headers, rows)
         return self.plotter.plot_varying_degree(n, rows)
+
+    def bench_key_insertion_order(self, n: int = 10000, d: int | None = None):
+        """compare insert + search performance for sequential, random and reverse ordered key insertion for both bplus and brute"""
+        if d is None:
+            d = self.DEGREES[0]
+        self.logger.info(f"Key insertion order (N={n}, degree={d})")
+        orderings = {
+            "sequential": list(range(1, n + 1)),
+            "random": random.sample(range(1, n + 1), n),
+            "reverse": list(range(n, 0, -1)),
+        }
+        headers = ["distribution", "indexer", "insert_total_s", "search_hit_avg_s"]
+        rows: List[List[str | int | float]] = []
+        for order, keys in orderings.items():
+            sample = random.sample(keys, n // 10)  # for searching
+            for indexer in ("bplus", "brute"):
+                insertion_times: List[int | float] = []
+                avg_search_times: List[int | float] = []
+
+                for _ in range(self.TRIALS):
+                    tbl = self.make_table(indexer, d)
+
+                    insertion_times.append(
+                        PerformanceAnalyzer.timeit(
+                            lambda k: tbl.insert_row(self.make_row(k)), iter_over=keys
+                        )
+                    )
+
+                    avg_search_times.append(
+                        PerformanceAnalyzer.timeit(tbl.select, iter_over=sample)
+                        / len(sample)
+                    )
+
+                row: List[str | int | float] = [
+                    order,
+                    indexer,
+                    statistics.median(insertion_times),
+                    statistics.median(avg_search_times),
+                ]
+                rows.append(row)
+                label = "B+Tree" if indexer == "bplus" else "Brute "
+                self.logger.info(
+                    f"  {order:>12}  {label}  insert={row[2]:.4f}s  "
+                    f"search={row[3]:.9f}s"
+                )
+        self._write_csv("key_ordering.csv", headers, rows)
+        return self.plotter.plot_key_insertion_order(n, d, rows)
