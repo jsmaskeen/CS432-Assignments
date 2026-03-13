@@ -339,7 +339,7 @@ class PerformanceAnalyzer:
                 )
         self._write_csv("key_ordering.csv", headers, rows)
         return self.plotter.plot_key_insertion_order(n, d, rows)
-    
+
     def bench_incremental_insert(self, n: int = 6000, d: int | None = None):
         """
         insert keys one by one, and see per insert latency.
@@ -373,3 +373,159 @@ class PerformanceAnalyzer:
         )
 
         return self.plotter.plot_incremental_insert(n, res)
+
+    def bench_bulk_delete(self, n: int = 10000, d: int = 4):
+        """
+        insert a large number of rows then delete it in random order to measure bulk delete performance.
+        triggers heavy underflow/merge cascades in the B+ Tree.
+        """
+        self.logger.info(f"Bulk Delete (N={n}, degree={d})")
+        keys = list(range(1, n + 1))
+        random.shuffle(keys)
+        delete = keys[:]
+        random.shuffle(delete)
+
+        headers = ["indexer", "insert_total_s", "delete_total_s"]
+        rows: List[List[str | int | float]] = []
+
+        for indexer in ("bplus", "brute"):
+            insertion_time: List[int | float] = []
+            deletion_time: List[int | float] = []
+
+            for _ in range(self.TRIALS):
+                tbl = self.make_table(indexer, d)
+
+                insertion_time.append(
+                    PerformanceAnalyzer.timeit(
+                        lambda k: tbl.insert_row(self.make_row(k)), iter_over=keys
+                    )
+                )
+
+                deletion_time.append(
+                    PerformanceAnalyzer.timeit(tbl.delete_row, iter_over=delete)
+                )
+
+            row: List[str | int | float] = [
+                indexer,
+                statistics.median(insertion_time),
+                statistics.median(deletion_time),
+            ]
+            rows.append(row)
+            label = "B+Tree" if indexer == "bplus" else "Brute "
+            self.logger.info(f"{label}  insert={row[1]:.4f}s  delete_all={row[2]:.4f}s")
+
+        self._write_csv("bulk_delete.csv", headers, rows)
+        return self.plotter.plot_bulk_delete(n, d, rows)
+
+    def bench_range_queries(self, n: int = 10000, d: int = 4):
+        """
+        Do a range query, vary range span from defined low% to high% of key space. And measure times.
+        """
+
+        self.logger.info(f"Range Queries  (N={n}, degree={d})")
+        headers = ["range_pct", "bplus_s", "brute_s"]
+        rows: List[List[float]] = []
+        keys = list(range(1, n + 1))
+        random.shuffle(keys)
+
+        for pct in self.RANGES_PCT:
+            range_ = max(1, int(n * pct))
+            bp_t: List[int | float] = []
+            br_t: List[int | float] = []
+
+            for _ in range(self.TRIALS):
+                lo = random.randint(1, max(1, n - range_))
+                hi = lo + range_
+
+                tbl_bp = self.make_table("bplus")
+                self.populate_table(tbl_bp, keys)
+                bp_t.append(PerformanceAnalyzer.timeit(tbl_bp.select_range, lo, hi)[1])
+
+                tbl_br = self.make_table("brute")
+                self.populate_table(tbl_br, keys)
+                br_t.append(PerformanceAnalyzer.timeit(tbl_br.select_range, lo, hi)[1])
+            row = [pct, statistics.median(bp_t), statistics.median(br_t)]
+            rows.append(row)
+            self.logger.info(
+                f"span={pct:>3}%  B+Tree={row[1]:.6f}s  Brute={row[2]:.6f}s"
+            )
+
+        self._write_csv(
+            "range_queries.csv", headers, cast(List[List[int | str | float]], rows)
+        )
+        return self.plotter.plot_range_queries(n, d, rows)
+
+    def bench_mixed_load(self, n: int = 10000, d: int = 4, operations: int = 10000):
+        """
+        Measure time for
+        50% search, 20% insert, 15% update, 10% delete, 5% range query
+        """
+        self.logger.info(f"Mixed Workload  (N={n}, ops={operations}, degree={d})")
+
+        headers = ["indexer", "total_s", "ops_per_sec"]
+        rows: List[List[str | int | float]] = []
+
+        keys = list(range(1, n + 1))
+        random.shuffle(keys)
+        next_key = n + 1
+
+        for indexer in ("bplus", "brute"):
+            times: List[float] = []
+            for _ in range(self.TRIALS):
+                tbl = self.make_table(indexer, d)
+                self.populate_table(tbl, keys)
+                available_keys = set(keys)
+                nk = next_key
+
+                t0 = time.perf_counter()
+                for _ in range(operations):
+                    rand = random.random()
+                    match rand:
+                        case _ if rand < 0.5:
+                            # search
+                            k = (
+                                random.choice(list(available_keys))
+                                if available_keys
+                                else 1
+                            )
+                            tbl.select(k)
+                        case _ if rand < 0.70:
+                            # insert
+                            tbl.insert_row(self.make_row(nk))
+                            available_keys.add(nk)
+                            nk += 1
+                        case _ if rand < 0.85:
+                            # update
+                            if available_keys:
+                                k = random.choice(list(available_keys))
+                                tbl.update_row(k, {"score": 42})
+                        case _ if rand < 0.95:
+                            # delete
+                            if available_keys:
+                                k = random.choice(list(available_keys))
+                                tbl.delete_row(k)
+                                available_keys.discard(k)
+                        case _:
+                            # range query
+                            lo = random.randint(1, max(1, nk - 500))
+                            tbl.select_range(lo, lo + 500)
+                times.append(time.perf_counter() - t0)
+
+            med = statistics.median(times)
+            row: List[str | float | int] = [indexer, med, operations / med]
+            rows.append(row)
+            label = "B+Tree" if indexer == "bplus" else "Brute "
+            self.logger.info(
+                f"{label}  total={med:.4f}s  throughput={operations / med:.0f} ops/s"
+            )
+
+        self._write_csv("mixed_load.csv", headers, rows)
+        return self.plotter.plot_mixed_load(n, d, operations, rows)
+
+    def run_and_save(self):
+        figs: Dict[str, Tuple[str, Figure]] = {}
+        for i in PerformanceAnalyzer.__dict__.keys():
+            if i.startswith("bench_"):
+                f = PerformanceAnalyzer.__dict__[i]
+                figs[i] = (" ".join(map(str.strip, f.__doc__.split("\n"))), f(self))
+        return figs

@@ -51,11 +51,11 @@ class Plotter:
                 color="salmon",
             )
 
-            sizes_theory = np.logspace( # type:ignore
+            sizes_theory = np.logspace(  # type:ignore
                 np.log10(min(sizes_bp + sizes_br)),
                 np.log10(max(sizes_bp + sizes_br)),
                 50,
-            )  
+            )
 
             if name == "insert_total_s":
                 # B+ Tree: O(n log n), Brute: O(n)
@@ -63,9 +63,9 @@ class Plotter:
                 br_theory = sizes_theory  # type:ignore
             elif name == "range_query_avg_s":
                 # B+ Tree: O(log n + k), Brute: O(n)
-                bp_theory = ( # type:ignore
-                    np.log2(sizes_theory) + sizes_theory * range_pct # type:ignore
-                )  
+                bp_theory = (  # type:ignore
+                    np.log2(sizes_theory) + sizes_theory * range_pct  # type:ignore
+                )
                 br_theory = sizes_theory * range_pct  # type:ignore
             else:
                 # Search/Update/Delete: B+ Tree O(log n), Brute: O(n)
@@ -169,7 +169,7 @@ class Plotter:
 
         fig.tight_layout(rect=[0, 0, 1, 0.93])  # type:ignore
         return fig
-    
+
     def plot_incremental_insert(self, n: int, res: Dict[str, List[int | float]]):
         fig, (ax1, ax2) = plt.subplots(  # type:ignore
             2, 1, figsize=(14, 8), sharex=True
@@ -193,19 +193,27 @@ class Plotter:
                 linewidth=1.5,
                 label=f"MA-{window} (empirical)",
             )
-            
+
             if indexer == "bplus":
                 # B+ Tree: O(log n) per insert
                 theory = np.log2(np.arange(1, n + 1))
             else:
                 # Brute: O(1) per insert
                 theory = np.ones(n)
-            
+
             theory_scale = np.median(ma) / np.median(theory)
             theory = theory * theory_scale
-            
-            ax.plot(xs, theory, ":", linewidth=2.5, alpha=0.8, color=color, label=f"Theory ({complexity})")
-            ax.set_yscale('log')
+
+            ax.plot(
+                xs,
+                theory,
+                ":",
+                linewidth=2.5,
+                alpha=0.8,
+                color=color,
+                label=f"Theory ({complexity})",
+            )
+            ax.set_yscale("log")
             ax.set_ylabel("Time per insert (s)")
             ax.set_title(title)
             ax.legend()
@@ -214,4 +222,84 @@ class Plotter:
         ax2.set_xlabel("Insert #")
         fig.tight_layout(rect=[0, 0, 1, 0.95])  # type:ignore
 
+        return fig
+
+    def plot_bulk_delete(self, n: int, d: int, rows: List[List[str | int | float]]):
+        labels = ["B+ Tree", "Brute Force"]
+        insert_vals = [r[1] for r in rows]
+        delete_vals = [r[2] for r in rows]
+
+        x = np.arange(len(labels))
+        width = 0.35
+        fig, ax = plt.subplots(figsize=(8, 5))  # type:ignore
+        ax.bar(  # type:ignore
+            x - width / 2, insert_vals, width, label="Insert All", color="steelblue"
+        )
+        ax.bar(  # type:ignore
+            x + width / 2, delete_vals, width, label="Delete All", color="salmon"
+        )
+        ax.set_xticks(x)  # type:ignore
+        ax.set_xticklabels(labels)  # type:ignore
+        ax.set_ylabel("Time (s)")  # type:ignore
+        ax.set_title(f"Bulk Insert + Delete Test (N={n}, degree={d})")  # type:ignore
+        ax.legend()  # type:ignore
+        ax.grid(axis="y", ls="--", alpha=0.5)  # type:ignore
+        fig.tight_layout()  # type:ignore
+        return fig
+
+    def plot_range_queries(self, n: int, d: int, rows: List[List[float]]):
+        pcts = [r[0] for r in rows]
+        bp_t = [r[1] for r in rows]
+        br_t = [r[2] for r in rows]
+
+        fig, ax = plt.subplots(figsize=(10, 5))  # type: ignore
+        ax.plot(pcts, bp_t, "o-", label="B+ Tree (empirical)", linewidth=2, color="steelblue")  # type: ignore
+        ax.plot(pcts, br_t, "s--", label="Brute Force (empirical)", linewidth=2, color="salmon")  # type: ignore
+
+        # B+ Tree:
+        # O(log n) to find starting leaf position
+        # O(k) to traverse linked list and collect k results
+        # Total: O(log n + k) for range queries
+        # Brute Force: O(n), must scan entire unordered list regardless of range size
+        pcts_theory = np.linspace(min(pcts), max(pcts), 50)
+        k_results = n * pcts_theory
+        bp_theory = np.log2(n) + k_results
+        br_theory = np.ones_like(pcts_theory) * n
+
+        # Normalize
+        if len(bp_t) > 0:
+            bp_scale = np.median(bp_t) / np.median(bp_theory)
+            bp_theory = bp_theory * bp_scale
+
+        if len(br_t) > 0:
+            br_scale = np.median(br_t) / np.median(br_theory)
+            br_theory = br_theory * br_scale
+
+        ax.plot(pcts_theory, bp_theory, ":", linewidth=2.5, alpha=0.8, color="steelblue", label="B+ Tree Theory (O(log n + k) via linked list)")  # type: ignore
+        ax.plot(pcts_theory, br_theory, ":", linewidth=2.5, alpha=0.8, color="salmon", label="Brute Theory (O(n))")  # type: ignore
+
+        ax.set_xlabel("Range Span (% of key space)")  # type: ignore
+        ax.set_ylabel("Query Time (s)")  # type: ignore
+        ax.set_title(f"Range Query Scaling (N={n}, Degree={d})")  # type: ignore
+        ax.legend()  # type: ignore
+        ax.grid(True, ls="--", alpha=0.5)  # type: ignore
+        fig.tight_layout()
+        return fig
+
+    def plot_mixed_load(
+        self, n: int, d: int, operations: int, rows: List[List[str | int | float]]
+    ):
+        labels = ["B+ Tree", "Brute Force"]
+        throughput = [r[2] for r in rows]
+
+        fig, ax = plt.subplots(figsize=(8, 5))  # type:ignore
+        ax.bar(# type:ignore
+            labels, throughput, color=["steelblue", "salmon"], edgecolor="black"
+        )  
+        ax.set_ylabel("Throughput (ops/s)")  # type:ignore
+        ax.set_title(# type:ignore
+            f"Mixed Workload Throughput (N={n}, Degree={d}, Operations={operations} ops)"
+        )  
+        ax.grid(axis="y", ls="--", alpha=0.5)  # type:ignore
+        fig.tight_layout()
         return fig
