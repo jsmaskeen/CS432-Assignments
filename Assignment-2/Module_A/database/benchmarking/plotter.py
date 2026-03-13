@@ -169,3 +169,49 @@ class Plotter:
 
         fig.tight_layout(rect=[0, 0, 1, 0.93])  # type:ignore
         return fig
+    
+    def plot_incremental_insert(self, n: int, res: Dict[str, List[int | float]]):
+        fig, (ax1, ax2) = plt.subplots(  # type:ignore
+            2, 1, figsize=(14, 8), sharex=True
+        )
+        fig.suptitle(f"Per-Insert Latency (N={n})", fontsize=14)  # type:ignore
+
+        xs = range(1, n + 1)
+        window = 50  # moving avg
+
+        for ax, indexer, color, title, complexity in [
+            (ax1, "bplus", "steelblue", "B+ Tree", "O(log n)"),
+            (ax2, "brute", "salmon", "Brute Force", "O(1)"),
+        ]:
+            raw = res[indexer]
+            ax.plot(xs, raw, alpha=0.15, color=color, linewidth=0.5)
+            ma = np.convolve(raw, np.ones(window) / window, mode="valid")
+            ax.plot(
+                range(window, n + 1),
+                ma,
+                color=color,
+                linewidth=1.5,
+                label=f"MA-{window} (empirical)",
+            )
+            
+            if indexer == "bplus":
+                # B+ Tree: O(log n) per insert
+                theory = np.log2(np.arange(1, n + 1))
+            else:
+                # Brute: O(1) per insert
+                theory = np.ones(n)
+            
+            theory_scale = np.median(ma) / np.median(theory)
+            theory = theory * theory_scale
+            
+            ax.plot(xs, theory, ":", linewidth=2.5, alpha=0.8, color=color, label=f"Theory ({complexity})")
+            ax.set_yscale('log')
+            ax.set_ylabel("Time per insert (s)")
+            ax.set_title(title)
+            ax.legend()
+            ax.grid(True, ls="--", alpha=0.5)
+
+        ax2.set_xlabel("Insert #")
+        fig.tight_layout(rect=[0, 0, 1, 0.95])  # type:ignore
+
+        return fig

@@ -339,3 +339,37 @@ class PerformanceAnalyzer:
                 )
         self._write_csv("key_ordering.csv", headers, rows)
         return self.plotter.plot_key_insertion_order(n, d, rows)
+    
+    def bench_incremental_insert(self, n: int = 6000, d: int | None = None):
+        """
+        insert keys one by one, and see per insert latency.
+        should show small spike in B+ tree, if node split happnes.
+        """
+
+        if d is None:
+            d = self.DEGREES[0]
+        self.logger.info(f"Incremental Insert (N={n}, degree={d})")
+        keys = list(range(1, n + 1))
+        random.shuffle(keys)
+        res: Dict[str, List[int | float]] = {"bplus": [], "brute": []}
+        for indexer in ("bplus", "brute"):
+            tbl = self.make_table(indexer, d)
+            for k in keys:
+                res[indexer].append(
+                    PerformanceAnalyzer.timeit(tbl.insert_row, self.make_row(k))[1]
+                )
+
+        rows: List[List[str | int | float]] = [
+            [i + 1, res["bplus"][i], res["brute"][i]] for i in range(n)
+        ]
+
+        self._write_csv("incremental_insert.csv", ["i", "bplus_s", "brute_s"], rows)
+
+        bp_avg = statistics.mean(res["bplus"])
+        br_avg = statistics.mean(res["brute"])
+        self.logger.info(
+            f"B+Tree avg per-insert: {bp_avg:.9f}s\n"
+            f"Brute  avg per-insert: {br_avg:.9f}s"
+        )
+
+        return self.plotter.plot_incremental_insert(n, res)
