@@ -231,4 +231,64 @@ class PerformanceAnalyzer:
         self._write_csv("scale_size.csv", headers, rows)
         return self.plotter.plot_scale_size(d, rows, self.RANGE_QUERY_PCT)
 
-    
+    def bench_varying_degree(self, n: int = 10000):
+        """
+        Measuring bulk insert, avg search hit, avg range query, and avg delete time for a fixed numbe of rows, but varying the degree
+        """
+
+        # for a fixed n = 10k, vary the B+ tree degree, See trends for all operations.
+        self.logger.info(f"Varying degree (N={n})")
+        headers = [
+            "degree",
+            "insert_total_s",
+            "search_hit_avg_s",
+            "range_query_avg_s",
+            "delete_avg_s",
+        ]
+        rows: List[List[int | str | float]] = []
+
+        keys = list(range(1, n + 1))
+        random.shuffle(keys)
+        sample = random.sample(keys, n // 10)
+
+        for d in self.DEGREES:
+            timings: Dict[str, List[float | int]] = {h: [] for h in headers[1:]}
+            for _ in range(self.TRIALS):
+                tbl = self.make_table("bplus", d)
+
+                timings["insert_total_s"].append(
+                    PerformanceAnalyzer.timeit(
+                        lambda k: tbl.insert_row(self.make_row(k)), iter_over=keys
+                    )
+                )
+
+                timings["search_hit_avg_s"].append(
+                    PerformanceAnalyzer.timeit(tbl.select, iter_over=sample)
+                )
+
+                # range query
+                range_ = max(1, int(n * self.RANGE_QUERY_PCT))
+                lo = random.randint(1, max(1, n - range_))
+
+                timings["range_query_avg_s"].append(
+                    PerformanceAnalyzer.timeit(tbl.select_range, lo, lo + range_)[1]
+                )
+
+                # delete
+                del_keys = random.sample(keys, max(1, n // 10))
+                timings["delete_avg_s"].append(
+                    PerformanceAnalyzer.timeit(tbl.delete_row, iter_over=del_keys)
+                    / len(del_keys)
+                )
+
+            row: List[int | str | float] = [d]
+            row += [statistics.median(timings[h]) for h in headers[1:]]
+            rows.append(row)
+            self.logger.info(
+                f"  degree={d:>3}  insert={row[1]:.4f}s  "
+                f"search={row[2]:.9f}s  range={row[3]:.6f}s  "
+                f"delete={row[4]:.9f}s"
+            )
+
+        self._write_csv("varying_degree.csv", headers, rows)
+        return self.plotter.plot_varying_degree(n, rows)

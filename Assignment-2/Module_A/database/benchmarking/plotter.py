@@ -74,3 +74,25 @@ class Plotter:
             ax.grid(True, which="both", ls="--", alpha=0.5)
         fig.tight_layout(rect=[0, 0, 1, 0.95])  # type:ignore
         return fig
+
+    def plot_varying_degree(self, n: int, rows: List[List[str | float | int]]):
+        degs = [r[0] for r in rows]
+        fig, axes = plt.subplots(1, 4, figsize=(20, 5))  # type:ignore
+        fig.suptitle(f"B+ Tree - Effect of Degree (N={n})", fontsize=14)  # type:ignore
+
+        titles = [
+            "Insert Total (s)",
+            "Avg Search Hit (s)",
+            "Range Query (s)",
+            "Avg Delete (s)",
+        ]
+        for i, (ax, title) in enumerate(zip(axes, titles)):
+            vals = [r[i + 1] for r in rows]
+            ax.bar([str(d) for d in degs], vals, color="steelblue", edgecolor="black")
+            ax.set_xlabel("Degree")
+            ax.set_ylabel(title)
+            ax.set_title(title)
+            ax.grid(axis="y", ls="--", alpha=0.5)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.93])  # type:ignore
+        return fig
