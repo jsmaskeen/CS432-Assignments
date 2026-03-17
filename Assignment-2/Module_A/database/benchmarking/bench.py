@@ -20,6 +20,8 @@ import random
 import csv
 import os
 from matplotlib.figure import Figure
+import tracemalloc
+import numpy as np
 
 _authors = ["jaskirat", "karan", "aarsh", "romit", "abhinav"]
 
@@ -521,6 +523,53 @@ class PerformanceAnalyzer:
 
         self._write_csv("mixed_load.csv", headers, rows)
         return self.plotter.plot_mixed_load(n, d, operations, rows)
+
+    def bench_memory_usage(self, sizes: List[int] | None = None):
+        """
+        Measure the peak memory usage scaling with the number of rows across varying degrees.
+        """
+        if sizes is None:
+            sizes = np.arange(2000, 10001, 2000)
+            
+        self.logger.info(f"Memory Usage Scaling (sizes={sizes}, degrees={self.DEGREES})")
+        
+        headers = ["N", "indexer", "degree", "peak_memory_mb"]
+        rows: List[List[int | str | float]] = []
+
+        for n in sizes:
+            keys = list(range(1, n + 1))
+            random.shuffle(keys)
+
+            tracemalloc.start()
+            tbl_brute = self.make_table("brute")
+            for k in keys:
+                tbl_brute.insert_row(self.make_row(k))
+            
+            _, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            
+            peak_mb = peak / (1024 * 1024)
+            rows.append([n, "brute", 0, peak_mb]) 
+            self.logger.info(f"  N={n:>6}  Brute Force    peak_mem={peak_mb:.4f}MB")
+
+            # 2. Test B+ Tree across all configured degrees
+            for d in self.DEGREES:
+                tracemalloc.start()
+                tbl_bp = self.make_table("bplus", d)
+                for k in keys:
+                    tbl_bp.insert_row(self.make_row(k))
+                
+                _, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+                
+                peak_mb = peak / (1024 * 1024)
+                rows.append([n, "bplus", d, peak_mb])
+                self.logger.info(f"  N={n:>6}  B+Tree (d={d:<2}) peak_mem={peak_mb:.4f}MB")
+
+        self._write_csv("memory_usage.csv", headers, rows)
+        
+        return self.plotter.plot_memory_usage(rows) 
+
 
     def run_and_save(self):
         figs: Dict[str, Tuple[str, Figure]] = {}

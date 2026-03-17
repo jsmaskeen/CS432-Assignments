@@ -303,3 +303,37 @@ class Plotter:
         ax.grid(axis="y", ls="--", alpha=0.5)  # type:ignore
         fig.tight_layout()
         return fig
+    
+    def plot_memory_usage(self, rows: List[List[int | str | float]]):
+        fig, ax = plt.subplots(figsize=(10, 6))  # type:ignore
+
+        br_rows = [r for r in rows if r[1] == "brute"]
+        sizes_br = [cast(int, r[0]) for r in br_rows]
+        br_peak = [cast(float, r[3]) for r in br_rows]
+        
+        ax.plot(  # type:ignore
+            sizes_br, br_peak, "s--", label="Brute Force", linewidth=2.5, color="salmon"
+        )
+
+        bp_rows = [r for r in rows if r[1] == "bplus"]
+        degs = sorted(list(set(cast(int, r[2]) for r in bp_rows)))
+        
+        colors = plt.cm.viridis(np.linspace(0.15, 0.95, len(degs)))
+
+        for i, d in enumerate(degs):
+            d_rows = [r for r in bp_rows if r[2] == d]
+            sizes_d = [cast(int, r[0]) for r in d_rows]
+            peak_d = [cast(float, r[3]) for r in d_rows]
+            
+            ax.plot(  # type:ignore
+                sizes_d, peak_d, "o-", label=f"B+ Tree (deg={d})", linewidth=1.5, color=colors[i]
+            )
+
+        ax.set_xlabel("N (number of rows)")  # type:ignore
+        ax.set_ylabel("Peak Memory Usage (MB)")  # type:ignore
+        ax.set_title("Peak Memory Usage vs Dataset Size (Varying Degrees)")  # type:ignore
+        ax.legend()  # type:ignore
+        ax.grid(True, ls="--", alpha=0.5)  # type:ignore
+        
+        fig.tight_layout()
+        return fig

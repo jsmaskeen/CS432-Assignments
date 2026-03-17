@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Union, Tuple, Optional, overload, Literal
 from math import ceil
+import bisect
 
 
 class BPlusTreeNode:
@@ -48,17 +49,15 @@ class BPlusTree:
             loc = self._find_index(key, cur.keys)
             cur = cur.children[loc]
 
-        for idx, k in enumerate(cur.keys):
-            if k == key:
-                return cur.values[idx] if not get_node else (cur, idx)
+        idx = bisect.bisect_left(cur.keys, key)
+        if idx < len(cur.keys) and cur.keys[idx] == key:
+            return cur.values[idx] if not get_node else (cur, idx)
 
         return None if not get_node else (cur, None)
 
     def _find_index(self, key: int, keys: List[int]):
-        for i, k in enumerate(keys):
-            if k >= key:
-                return (i + 1) if k == key else i
-        return len(keys)
+        i = bisect.bisect_left(keys, key)
+        return i + 1 if i < len(keys) and keys[i] == key else i
 
     def update(self, key: int, new_value: Dict[str, Any]):
         cur, idx = self._search(key, get_node=True)
@@ -74,11 +73,7 @@ class BPlusTree:
         if idx is not None:
             raise ValueError("Tried to modify an existing primary key")
         else:
-            j = len(cur.keys)
-            for i in range(len(cur.keys)):
-                if cur.keys[i] > key:
-                    j = i
-                    break
+            j = bisect.bisect_left(cur.keys, key)
             cur.keys.insert(j, key)
             cur.values.insert(j, value)
             if len(cur.keys) >= self.degree:
@@ -162,11 +157,7 @@ class BPlusTree:
         (cur, idx) = self._search(start_key, True)
         result: List[Tuple[int, Dict[str, Any]]] = []
         if idx is None:
-            idx = len(cur.keys)
-            for i, val in enumerate(cur.keys):
-                if val >= start_key:
-                    idx = i
-                    break
+            idx = bisect.bisect_left(cur.keys, start_key)
 
         while cur is not None:
             while idx < len(cur.keys):
@@ -204,22 +195,16 @@ class BPlusTree:
         cur = self.root
         nodes_having_key: List[Tuple[BPlusTreeNode, int]] = []  # last one is the leaf
         while not cur.leaf:
-            loc = len(cur.keys)
-            for i, k in enumerate(cur.keys):
-                if k >= key:
-                    if k == key:
-                        loc = i + 1
-                        nodes_having_key.append((cur, i))
-                    else:
-                        loc = i
-                    break
+            i = bisect.bisect_left(cur.keys, key)
+            if i < len(cur.keys) and cur.keys[i] == key:
+                loc = i + 1
+                nodes_having_key.append((cur, i))
+            else:
+                loc = i
             cur = cur.children[loc]
 
-        leaf_idx = None
-        for idx, k in enumerate(cur.keys):
-            if k == key:
-                leaf_idx = idx
-                break
+        idx = bisect.bisect_left(cur.keys, key)
+        leaf_idx = idx if (idx < len(cur.keys) and cur.keys[idx] == key) else None
 
         if leaf_idx is None:
             return False  # key not found
@@ -241,18 +226,24 @@ class BPlusTree:
         return True
 
     def _fix_separator(self, key: int):
-        # this is needed cause python stores references, and deleting later doesnt clearout those older stale references
         node = self.root
+        
         while not node.leaf:
-            for i, k in enumerate(node.keys):
-                if k == key:
-                    child = node.children[i + 1]
-                    while not child.leaf:
-                        child = child.children[0]
-                    if child.keys:
-                        node.keys[i] = child.keys[0]
-                    return 
-            break
+            i = bisect.bisect_left(node.keys, key)
+            
+            # check if the stale key is in THIS specific internal node
+            if i < len(node.keys) and node.keys[i] == key:
+                #replace it with the smallest key of its right subtree.
+                child = node.children[i + 1]
+                while not child.leaf:
+                    child = child.children[0]
+                
+                if child.keys:
+                    node.keys[i] = child.keys[0]
+                
+                return 
+            
+            node = node.children[i]
 
     def _fix_underflow(self, node: BPlusTreeNode, min_keys: int):
         # if node is root, the tree height will shrink
