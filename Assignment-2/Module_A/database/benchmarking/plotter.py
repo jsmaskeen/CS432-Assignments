@@ -26,7 +26,7 @@ class Plotter:
 
         fig, axes = plt.subplots(2, 3, figsize=(18, 10))  # type:ignore
         fig.suptitle(  # type:ignore
-            f"B+ Tree (degree={d}) vs Brute Force — Size Scaling",
+            f"B+ Tree (degree={d}) vs Brute Force: Scaling Size",
             fontsize=15,
         )
 

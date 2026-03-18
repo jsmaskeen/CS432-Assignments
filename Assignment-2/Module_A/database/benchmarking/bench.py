@@ -49,6 +49,7 @@ class PerformanceAnalyzer:
         COLS: List[str] = ["id", "name", "email", "score"],
         PRIMARY_KEY: str = "id",
         RANGES_PCT: List[float] = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5],
+        MEMORY_BENCH_SIZES:np.ndarray = np.arange(2000, 10001, 2000),
         result_folder: str | None = None,
         logfile: str = "analysis.log",
         seed: int = 230709,
@@ -60,6 +61,7 @@ class PerformanceAnalyzer:
         self.COLS = COLS
         self.PRIMARY_KEY = PRIMARY_KEY
         self.RANGES_PCT = RANGES_PCT
+        self.MEMORY_BENCH_SIZES = MEMORY_BENCH_SIZES
         self.logger = logging.Logger("PerformanceAnalysisLogs")
         self.logger.setLevel(logging.INFO)
         open(Path(logfile).expanduser().resolve(strict=False), "w").close()
@@ -529,7 +531,7 @@ class PerformanceAnalyzer:
         Measure the peak memory usage scaling with the number of rows across varying degrees.
         """
         if sizes is None:
-            sizes = np.arange(2000, 10001, 2000)
+            sizes = self.MEMORY_BENCH_SIZES
             
         self.logger.info(f"Memory Usage Scaling (sizes={sizes}, degrees={self.DEGREES})")
         
