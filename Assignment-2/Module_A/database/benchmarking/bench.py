@@ -573,10 +573,11 @@ class PerformanceAnalyzer:
         return self.plotter.plot_memory_usage(rows) 
 
 
-    def run_and_save(self):
+    def run(self):
         figs: Dict[str, Tuple[str, Figure]] = {}
         for i in PerformanceAnalyzer.__dict__.keys():
             if i.startswith("bench_"):
+                print(f"Running {i}")
                 f = PerformanceAnalyzer.__dict__[i]
                 figs[i] = (" ".join(map(str.strip, f.__doc__.split("\n"))), f(self))
         return figs
