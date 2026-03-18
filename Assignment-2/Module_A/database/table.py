@@ -1,5 +1,5 @@
 from database.bplustree import BPlusTree
-from database.bruteeforce import BruteForceDB
+from database.bruteforce import BruteForceDB
 from typing import Literal, List, Union, Dict, Any, cast
 
 """
