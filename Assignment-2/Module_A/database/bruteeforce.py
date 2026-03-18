@@ -31,7 +31,7 @@ class BruteForceDB:
         return False
 
     def range_query(self, start: int, end: int):
-        return [(k, v) for k, v in self.data if start <= k <= end]
+        return [v for k, v in self.data if start <= k <= end]
     
     def get_all(self):
-        return self.data[:]
+        return [v for _,v in self.data]

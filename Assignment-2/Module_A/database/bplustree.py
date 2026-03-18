@@ -155,7 +155,7 @@ class BPlusTree:
     def range_query(self, start_key: int, end_key: int):
         # find the node where start key will be/just bigger than this, then trraverse the linked list
         (cur, idx) = self._search(start_key, True)
-        result: List[Tuple[int, Dict[str, Any]]] = []
+        result: List[Dict[str, Any]] = []
         if idx is None:
             idx = bisect.bisect_left(cur.keys, start_key)
 
@@ -164,7 +164,7 @@ class BPlusTree:
                 k = cur.keys[idx]
                 if k > end_key:
                     return result
-                result.append((k, cur.values[idx]))
+                result.append(cur.values[idx])
                 idx += 1
 
             cur = cur.next
@@ -175,7 +175,7 @@ class BPlusTree:
     def get_all(self):
         #  need to find ledtmost leaf and traverse hrough the linked list.
         cur = self.root
-        res: List[Tuple[int, Dict[str, Any]]] = []
+        res: List[Dict[str, Any]] = []
         while not cur.leaf:
             if not cur.children:
                 return res
@@ -183,7 +183,7 @@ class BPlusTree:
 
         while cur is not None:
             for i in range(len(cur.keys)):
-                res.append((cur.keys[i], cur.values[i]))
+                res.append(cur.values[i])
             cur = cur.next
 
         return res

@@ -57,6 +57,9 @@ class Table:
 
     def delete_row(self, key: int):
         return self.tree.delete(key)
+    
+    def select_all(self):
+        return self.tree.get_all()
 
     def __repr__(self):
         return (
