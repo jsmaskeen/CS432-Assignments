@@ -30,7 +30,7 @@ class Plotter:
             fontsize=15,
         )
 
-        for ax, (name, idx, ylabel, bp_complexity, br_complexity) in zip(
+        for ax, (name, idx, ylabel, _, _) in zip(
             axes.flat, ops
         ):
             # Plot empirical data
@@ -81,24 +81,24 @@ class Plotter:
                 bp_theory = bp_theory * bp_scale  # type:ignore
                 br_theory = br_theory * br_scale  # type:ignore
 
-            ax.plot(
-                sizes_theory,
-                bp_theory,
-                ":",
-                linewidth=2.5,
-                alpha=0.8,
-                color="steelblue",
-                label=f"B+ Tree Theory ({bp_complexity})",
-            )
-            ax.plot(
-                sizes_theory,
-                br_theory,
-                ":",
-                linewidth=2.5,
-                alpha=0.8,
-                color="salmon",
-                label=f"Brute Theory ({br_complexity})",
-            )
+            # ax.plot(
+            #     sizes_theory,
+            #     bp_theory,
+            #     ":",
+            #     linewidth=2.5,
+            #     alpha=0.8,
+            #     color="steelblue",
+            #     label=f"B+ Tree Theory ({bp_complexity})",
+            # )
+            # ax.plot(
+            #     sizes_theory,
+            #     br_theory,
+            #     ":",
+            #     linewidth=2.5,
+            #     alpha=0.8,
+            #     color="salmon",
+            #     label=f"Brute Theory ({br_complexity})",
+            # )
 
             ax.set_xlabel("N (number of rows)")
             ax.set_ylabel(ylabel)
@@ -171,57 +171,34 @@ class Plotter:
         return fig
 
     def plot_incremental_insert(self, n: int, res: Dict[str, List[int | float]]):
-        fig, (ax1, ax2) = plt.subplots(  # type:ignore
-            2, 1, figsize=(14, 8), sharex=True
-        )
-        fig.suptitle(f"Per-Insert Latency (N={n})", fontsize=14)  # type:ignore
+        fig, ax = plt.subplots(figsize=(14, 6))  # type:ignore
+        ax.set_title(f"Per-Insert Latency (N={n})")  # type:ignore
 
         xs = range(1, n + 1)
-        window = 50  # moving avg
+        window = min(50, n)  # moving avg
 
-        for ax, indexer, color, title, complexity in [
-            (ax1, "bplus", "steelblue", "B+ Tree", "O(log n)"),
-            (ax2, "brute", "salmon", "Brute Force", "O(1)"),
+        for indexer, color, label in [
+            ("bplus", "steelblue", "B+ Tree"),
+            ("brute", "salmon", "Brute Force"),
         ]:
             raw = res[indexer]
-            ax.plot(xs, raw, alpha=0.15, color=color, linewidth=0.5)
+            ax.plot(xs, raw, alpha=0.12, color=color, linewidth=0.6)  # type:ignore
             ma = np.convolve(raw, np.ones(window) / window, mode="valid")
-            ax.plot(
+            ax.plot(  # type:ignore
                 range(window, n + 1),
                 ma,
                 color=color,
-                linewidth=1.5,
-                label=f"MA-{window} (empirical)",
+                linewidth=2,
+                label=f"{label} MA-{window} (empirical)",
             )
 
-            if indexer == "bplus":
-                # B+ Tree: O(log n) per insert
-                theory = np.log2(np.arange(1, n + 1))
-            else:
-                # Brute: O(1) per insert
-                theory = np.ones(n)
+        ax.set_yscale("log")  # type:ignore
+        ax.set_xlabel("Insert #")  # type:ignore
+        ax.set_ylabel("Time per insert (s)")  # type:ignore
+        ax.legend()  # type:ignore
+        ax.grid(True, ls="--", alpha=0.5)  # type:ignore
 
-            theory_scale = np.median(ma) / np.median(theory)
-            theory = theory * theory_scale
-
-            ax.plot(
-                xs,
-                theory,
-                ":",
-                linewidth=2.5,
-                alpha=0.8,
-                color=color,
-                label=f"Theory ({complexity})",
-            )
-            ax.set_yscale("log")
-            ax.set_ylabel("Time per insert (s)")
-            ax.set_title(title)
-            ax.legend()
-            ax.grid(True, ls="--", alpha=0.5)
-
-        ax2.set_xlabel("Insert #")
-        fig.tight_layout(rect=[0, 0, 1, 0.95])  # type:ignore
-
+        fig.tight_layout()
         return fig
 
     def plot_bulk_delete(self, n: int, d: int, rows: List[List[str | int | float]]):
@@ -275,8 +252,8 @@ class Plotter:
             br_scale = np.median(br_t) / np.median(br_theory)
             br_theory = br_theory * br_scale
 
-        ax.plot(pcts_theory, bp_theory, ":", linewidth=2.5, alpha=0.8, color="steelblue", label="B+ Tree Theory (O(log n + k) via linked list)")  # type: ignore
-        ax.plot(pcts_theory, br_theory, ":", linewidth=2.5, alpha=0.8, color="salmon", label="Brute Theory (O(n))")  # type: ignore
+        # ax.plot(pcts_theory, bp_theory, ":", linewidth=2.5, alpha=0.8, color="steelblue", label="B+ Tree Theory (O(log n + k) via linked list)")  # type: ignore
+        # ax.plot(pcts_theory, br_theory, ":", linewidth=2.5, alpha=0.8, color="salmon", label="Brute Theory (O(n))")  # type: ignore
 
         ax.set_xlabel("Range Span (% of key space)")  # type: ignore
         ax.set_ylabel("Query Time (s)")  # type: ignore
@@ -318,7 +295,7 @@ class Plotter:
         bp_rows = [r for r in rows if r[1] == "bplus"]
         degs = sorted(list(set(cast(int, r[2]) for r in bp_rows)))
         
-        colors = plt.cm.viridis(np.linspace(0.15, 0.95, len(degs)))
+        colors = plt.cm.viridis(np.linspace(0.15, 0.95, len(degs))) # type:ignore
 
         for i, d in enumerate(degs):
             d_rows = [r for r in bp_rows if r[2] == d]
@@ -326,7 +303,7 @@ class Plotter:
             peak_d = [cast(float, r[3]) for r in d_rows]
             
             ax.plot(  # type:ignore
-                sizes_d, peak_d, "o-", label=f"B+ Tree (deg={d})", linewidth=1.5, color=colors[i]
+                sizes_d, peak_d, "o-", label=f"B+ Tree (deg={d})", linewidth=1.5, color=colors[i] # type:ignore
             )
 
         ax.set_xlabel("N (number of rows)")  # type:ignore
