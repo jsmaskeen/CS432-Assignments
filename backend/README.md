@@ -1,13 +1,14 @@
-# RAJAK Backend (Phase 1 Minimal Setup)
+# RAJAK Backend (Module B App Dev)
 
-Minimal FastAPI + SQLAlchemy setup.
+FastAPI + SQLAlchemy backend with username/password JWT auth and ride booking APIs.
 
 ## Includes
 
-- App bootstrap
+- App bootstrap + CORS
 - MySQL connection via SQLAlchemy
-- `Member` SQLAlchemy model + Pydantic schemas
-- Testing endpoints for DB health and Member CRUD
+- JWT auth (`register`, `login`, `me`)
+- Ride creation/listing/booking APIs
+- Testing endpoints for health and DB connectivity
 
 ## Quick Start
 
@@ -15,8 +16,9 @@ Minimal FastAPI + SQLAlchemy setup.
 2. Install dependencies:
     - `pip install -r requirements.txt`
 3. Copy `.env.example` to `.env` and fill MySQL credentials.
-4. Run the SQL Dump file on your MySQL server.
-5. Run app:
+4. Run the SQL dump on your MySQL server.
+5. Configure JWT and DB values in `.env`.
+6. Run app:
     - `uvicorn main:app --reload`
 
 ## Docs
@@ -27,6 +29,16 @@ Minimal FastAPI + SQLAlchemy setup.
 
 - `GET /api/v1/health`
 - `GET /api/v1/testing/db`
-- `POST /api/v1/testing/members`
-- `GET /api/v1/testing/members/{member_id}`
-- `GET /api/v1/testing/members`
+
+## Auth Endpoints
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+
+## Ride Endpoints
+
+- `GET /api/v1/rides`
+- `POST /api/v1/rides`
+- `POST /api/v1/rides/{ride_id}/book`
+- `GET /api/v1/rides/my/bookings`

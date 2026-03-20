@@ -1,0 +1,242 @@
+:root {
+	--bg: #f9f9ff;
+	--ink: #223;
+	--muted: #5d6077;
+	--card: #ffffffcc;
+	--line: #d6d6ef;
+	--primary: #4e8cff;
+	--accent: #ff9f7f;
+	--accent-2: #8fd3a8;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+	color: var(--ink);
+	background:
+		radial-gradient(circle at 10% 10%, #d7e6ff 0%, transparent 35%),
+		radial-gradient(circle at 90% 0%, #ffe4dc 0%, transparent 30%),
+		linear-gradient(180deg, #f8fbff 0%, #f7f3ff 100%);
+	min-height: 100vh;
+}
+
+.app-shell {
+	max-width: 1100px;
+	margin: 0 auto;
+	padding: 1rem;
+}
+
+.top-nav {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+	padding: 0.9rem 1rem;
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	backdrop-filter: blur(4px);
+}
+
+.brand {
+	font-weight: 700;
+	letter-spacing: 0.06em;
+}
+
+.top-nav nav {
+	display: flex;
+	gap: 0.7rem;
+}
+
+.top-nav a {
+	text-decoration: none;
+	color: var(--ink);
+	padding: 0.45rem 0.7rem;
+	border-radius: 999px;
+}
+
+.top-nav a:hover {
+	background: #edf3ff;
+}
+
+.page {
+	display: grid;
+	gap: 1rem;
+}
+
+.hero {
+	display: grid;
+	grid-template-columns: 1.2fr 1fr;
+	gap: 1rem;
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	padding: 1.2rem;
+}
+
+.hero h1 {
+	margin: 0.2rem 0 0.5rem;
+	font-size: clamp(1.8rem, 4vw, 3rem);
+	line-height: 1.1;
+}
+
+.eyebrow {
+	color: var(--primary);
+	font-weight: 700;
+	text-transform: uppercase;
+	font-size: 0.78rem;
+}
+
+.hero-actions {
+	display: flex;
+	gap: 0.7rem;
+}
+
+.hero-blob {
+	min-height: 220px;
+	border-radius: 20px;
+	background:
+		radial-gradient(circle at 20% 20%, #9bc3ff, transparent 45%),
+		radial-gradient(circle at 70% 60%, #ffb69c, transparent 45%),
+		radial-gradient(circle at 50% 50%, #97e1b2, transparent 55%), #eef4ff;
+}
+
+.features {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.8rem;
+}
+
+.feature-card,
+.card {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 1rem;
+}
+
+.auth-page,
+.rides-page {
+	max-width: 1000px;
+}
+
+.auth-toggle {
+	display: inline-flex;
+	background: #ecf0ff;
+	border-radius: 999px;
+	padding: 0.3rem;
+}
+
+.auth-toggle button {
+	border: 0;
+	background: transparent;
+	padding: 0.45rem 0.9rem;
+	border-radius: 999px;
+	cursor: pointer;
+}
+
+.auth-toggle .active {
+	background: white;
+}
+
+.form-card {
+	display: grid;
+	gap: 0.65rem;
+	max-width: 460px;
+}
+
+.form-card.compact {
+	max-width: 100%;
+}
+
+input,
+select,
+button {
+	font: inherit;
+}
+
+input,
+select {
+	border: 1px solid #ccd4ef;
+	border-radius: 10px;
+	padding: 0.65rem 0.75rem;
+}
+
+.btn {
+	border: 0;
+	border-radius: 999px;
+	padding: 0.6rem 0.95rem;
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.btn.primary {
+	background: linear-gradient(135deg, var(--primary), #71a4ff);
+	color: white;
+}
+
+.btn.ghost {
+	background: #eaf1ff;
+	color: var(--ink);
+}
+
+.grid-two {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.rides-list,
+.booking-list {
+	display: grid;
+	gap: 0.6rem;
+	max-height: 320px;
+	overflow: auto;
+	padding-right: 0.2rem;
+}
+
+.ride-card {
+	text-align: left;
+	border: 1px solid #d6def7;
+	border-radius: 10px;
+	background: white;
+	padding: 0.65rem;
+	display: grid;
+	gap: 0.2rem;
+	cursor: pointer;
+}
+
+.ride-card.selected {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px #ffd9cb;
+}
+
+.booking-list li {
+	list-style: none;
+	border: 1px solid #d6def7;
+	border-radius: 10px;
+	background: white;
+	padding: 0.6rem;
+	display: grid;
+	gap: 0.2rem;
+}
+
+.message {
+	color: var(--muted);
+	min-height: 1.2rem;
+}
+
+@media (max-width: 860px) {
+	.hero,
+	.features,
+	.grid-two {
+		grid-template-columns: 1fr;
+	}
+}

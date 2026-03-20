@@ -19,3 +19,9 @@ def get_db_session() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def init_auth_tables() -> None:
+    from models.auth_credential import AuthCredential
+
+    AuthCredential.__table__.create(bind=engine, checkfirst=True)

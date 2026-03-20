@@ -8,13 +8,19 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "RAJAK Backend"
     APP_ENV: str = "development"
+    LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
+    FRONTEND_ORIGIN: str = "http://localhost:5173"
 
     MYSQL_USER: str
     MYSQL_PASSWORD: str
     MYSQL_HOST: str = "localhost"
     MYSQL_PORT: int = 3306
     MYSQL_DB: str = "cabSharing"
+
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
     @computed_field  # type: ignore[prop-decorator]
     @property
