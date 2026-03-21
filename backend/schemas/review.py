@@ -12,11 +12,6 @@ class ReviewCreateRequest(BaseModel):
     comments: str | None = None
 
 
-class ReviewUpdateRequest(BaseModel):
-    rating: int | None = Field(default=None, ge=1, le=5)
-    comments: str | None = None
-
-
 class ReviewReadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

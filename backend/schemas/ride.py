@@ -39,6 +39,11 @@ class RideReadResponse(BaseModel):
     Ride_Status: str
 
 
+class RideWithBookingsResponse(BaseModel):
+    ride: RideReadResponse
+    bookings: list[BookingReadResponse]
+
+
 class BookingCreateRequest(BaseModel):
     pickup_geohash: str = Field(min_length=4, max_length=20)
     drop_geohash: str = Field(min_length=4, max_length=20)

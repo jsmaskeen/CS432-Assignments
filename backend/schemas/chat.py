@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class ChatCreateRequest(BaseModel):
-    message_body: str = Field(min_length=1, max_length=2000)
+from pydantic import BaseModel, ConfigDict
 
 
 class ChatReadResponse(BaseModel):

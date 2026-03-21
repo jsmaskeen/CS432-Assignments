@@ -1,7 +1,8 @@
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,10 +13,24 @@ from models.booking import Booking
 from models.member import Member
 from models.review import ReputationReview
 from models.ride import Ride
-from schemas.review import ReviewCreateRequest, ReviewReadResponse, ReviewUpdateRequest
+from schemas.review import ReviewCreateRequest, ReviewReadResponse
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 logger = logging.getLogger("rajak.reviews")
+
+
+def _update_reputation_score(member_id: int, db: Session) -> None:
+    avg_rating = db.scalar(
+        select(func.avg(ReputationReview.Rating)).where(ReputationReview.Reviewee_MemberID == member_id)
+    )
+    if avg_rating is None:
+        score = Decimal("0.0")
+    else:
+        score = Decimal(str(avg_rating)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+    member = db.scalar(select(Member).where(Member.MemberID == member_id))
+    if member is not None:
+        member.Reputation_Score = score
 
 
 def _ride_participant_member_ids(ride_id: int, db: Session) -> set[int]:
@@ -64,6 +79,8 @@ def create_review(
         Comments=payload.comments,
     )
     db.add(review)
+    db.flush()
+    _update_reputation_score(payload.reviewee_member_id, db)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -82,13 +99,21 @@ def create_review(
 
 
 @router.get("/ride/{ride_id}", response_model=list[ReviewReadResponse])
-def list_ride_reviews(ride_id: int, db: Session = Depends(get_db_session)) -> list[ReputationReview]:
+def list_ride_reviews(
+    ride_id: int,
+    _: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[ReputationReview]:
     stmt = select(ReputationReview).where(ReputationReview.RideID == ride_id).order_by(ReputationReview.Created_At.desc())
     return list(db.scalars(stmt))
 
 
 @router.get("/member/{member_id}", response_model=list[ReviewReadResponse])
-def list_member_reviews(member_id: int, db: Session = Depends(get_db_session)) -> list[ReputationReview]:
+def list_member_reviews(
+    member_id: int,
+    _: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[ReputationReview]:
     stmt = (
         select(ReputationReview)
         .where(
@@ -102,34 +127,17 @@ def list_member_reviews(member_id: int, db: Session = Depends(get_db_session)) -
     return list(db.scalars(stmt))
 
 
-@router.patch("/{review_id}", response_model=ReviewReadResponse)
-def update_review(
-    review_id: int,
-    payload: ReviewUpdateRequest,
+@router.get("/my", response_model=list[ReviewReadResponse])
+def list_my_reviews(
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> ReputationReview:
-    review = db.scalar(select(ReputationReview).where(ReputationReview.ReviewID == review_id))
-    if review is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
-    if review.Reviewer_MemberID != current_member.MemberID:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the reviewer can edit this review")
-
-    if payload.rating is not None:
-        review.Rating = payload.rating
-    if payload.comments is not None:
-        review.Comments = payload.comments
-
-    db.commit()
-    db.refresh(review)
-    audit_event(
-        action="reviews.update",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"review_id": review.ReviewID},
+) -> list[ReputationReview]:
+    stmt = (
+        select(ReputationReview)
+        .where(ReputationReview.Reviewer_MemberID == current_member.MemberID)
+        .order_by(ReputationReview.Created_At.desc())
     )
-    return review
+    return list(db.scalars(stmt))
 
 
 @router.delete("/{review_id}")
@@ -144,7 +152,10 @@ def delete_review(
     if review.Reviewer_MemberID != current_member.MemberID:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the reviewer can delete this review")
 
+    reviewee_id = review.Reviewee_MemberID
     db.delete(review)
+    db.flush()
+    _update_reputation_score(reviewee_id, db)
     db.commit()
     audit_event(
         action="reviews.delete",
