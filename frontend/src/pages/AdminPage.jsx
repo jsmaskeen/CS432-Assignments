@@ -6,6 +6,14 @@ export default function AdminPage() {
 	const [currentUser, setCurrentUser] = useState(null);
 	const [members, setMembers] = useState([]);
 	const [rideStats, setRideStats] = useState(null);
+	const [openRides, setOpenRides] = useState([]);
+	const [activeRides, setActiveRides] = useState([]);
+	const [completedRides, setCompletedRides] = useState([]);
+	const [inspectRideId, setInspectRideId] = useState("");
+	const [inspectedRide, setInspectedRide] = useState(null);
+	const [inspectedParticipants, setInspectedParticipants] = useState([]);
+	const [inspectedChats, setInspectedChats] = useState([]);
+	const [inspectStatus, setInspectStatus] = useState("");
 	const [auditLogs, setAuditLogs] = useState([]);
 	const [auditLimit, setAuditLimit] = useState(200);
 	const [unauthorizedChanges, setUnauthorizedChanges] = useState([]);
@@ -26,6 +34,9 @@ export default function AdminPage() {
 				logsData,
 				unauthorizedRows,
 				unauthorizedSummaryRows,
+				openRidesData,
+				activeRidesData,
+				completedRidesData,
 			] = await Promise.all([
 				api.me(),
 				api.listMembersAdmin(),
@@ -33,6 +44,9 @@ export default function AdminPage() {
 				api.listAuditLogsAdmin(auditLimitValue),
 				api.listUnauthorizedDbChangesAdmin(unauthorizedLimitValue),
 				api.listUnauthorizedDbSummaryAdmin(),
+				api.listOpenRidesAdmin(),
+				api.listActiveRidesAdmin(),
+				api.listCompletedRidesAdmin(),
 			]);
 			setCurrentUser(meData);
 			setMembers(membersData);
@@ -40,6 +54,9 @@ export default function AdminPage() {
 			setAuditLogs(logsData);
 			setUnauthorizedChanges(unauthorizedRows);
 			setUnauthorizedSummary(unauthorizedSummaryRows);
+			setOpenRides(openRidesData || []);
+			setActiveRides(activeRidesData || []);
+			setCompletedRides(completedRidesData || []);
 			setMessage(
 				`Loaded ${membersData.length} members, ${logsData.length} audit logs, ${unauthorizedRows.length} unauthorized DB changes`,
 			);
@@ -59,6 +76,31 @@ export default function AdminPage() {
 			loadAdminData();
 		} catch (error) {
 			setMessage(error.message);
+		}
+	}
+
+	async function inspectRide() {
+		const rideId = Number(inspectRideId);
+		if (!rideId) {
+			setInspectStatus("Enter a valid ride id");
+			return;
+		}
+		setInspectStatus("Loading ride...");
+		try {
+			const [rideData, participantsData, chatsData] = await Promise.all([
+				api.getRide(rideId),
+				api.listRideParticipantsAdmin(rideId),
+				api.listRideChatsAdmin(rideId),
+			]);
+			setInspectedRide(rideData);
+			setInspectedParticipants(participantsData || []);
+			setInspectedChats(chatsData || []);
+			setInspectStatus(`Loaded ride #${rideId}`);
+		} catch (error) {
+			setInspectStatus(error.message || "Failed to load ride");
+			setInspectedRide(null);
+			setInspectedParticipants([]);
+			setInspectedChats([]);
 		}
 	}
 
@@ -130,6 +172,158 @@ export default function AdminPage() {
 					</div>
 				</section>
 			) : null}
+
+			<section className="card">
+				<h2>Ride Explorer</h2>
+				<div className="pick-mode">
+					<input
+						type="number"
+						min="1"
+						placeholder="Ride ID"
+						value={inspectRideId}
+						onChange={event => setInspectRideId(event.target.value)}
+					/>
+					<button className="btn primary" type="button" onClick={inspectRide}>
+						Inspect Ride
+					</button>
+					<span className="small">{inspectStatus}</span>
+				</div>
+				{inspectedRide ? (
+					<div className="grid-two" style={{ marginTop: 12 }}>
+						<div className="panel">
+							<h3>Ride Details</h3>
+							<ul className="booking-list">
+								<li>
+									<strong>Ride #{inspectedRide.RideID}</strong>
+									<span>Status: {inspectedRide.Ride_Status}</span>
+									<span>Host: {inspectedRide.Host_MemberID}</span>
+									<span>
+										Departure: {new Date(inspectedRide.Departure_Time).toLocaleString()}
+									</span>
+									<span>Vehicle: {inspectedRide.Vehicle_Type}</span>
+									<span>
+										Seats: {inspectedRide.Max_Capacity} (avail {inspectedRide.Available_Seats})
+									</span>
+								</li>
+							</ul>
+						</div>
+						<div className="panel">
+							<h3>Participants</h3>
+							<ul className="booking-list">
+								{inspectedParticipants.map(participant => (
+									<li key={`${participant.member_id}-${participant.booking_id || "host"}`}>
+										<strong>
+											{participant.full_name} {participant.is_host ? "(Host)" : ""}
+										</strong>
+										<span>{participant.email}</span>
+										<span>Phone: {participant.phone_number || "-"}</span>
+										<span>Gender: {participant.gender}</span>
+										<span>
+											Booking: {participant.booking_id || "-"} {participant.booking_status || ""}
+										</span>
+									</li>
+								))}
+								{inspectedParticipants.length === 0 ? (
+									<li>No participants found.</li>
+								) : null}
+							</ul>
+						</div>
+					</div>
+				) : null}
+				{inspectedRide ? (
+					<div className="panel" style={{ marginTop: 12 }}>
+						<h3>Ride Chat</h3>
+						<div
+							style={{
+								maxHeight: 320,
+								overflowY: "auto",
+								display: "grid",
+								gap: 10,
+								padding: 12,
+								background: "rgba(255, 255, 255, 0.03)",
+								borderRadius: 12,
+							}}
+						>
+							{inspectedChats.length === 0 ? (
+								<p className="message">No chat messages.</p>
+							) : null}
+							{inspectedChats.map(message => (
+								<div key={message.MessageID} className="chat-bubble">
+									<div className="small">
+										{message.Sender_Name || `Member #${message.Sender_MemberID}`}
+									</div>
+									<p style={{ margin: "6px 0" }}>{message.Message_Body}</p>
+									<div className="small">
+										{message.Sent_At
+											? new Date(message.Sent_At).toLocaleString()
+											: ""}
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				) : null}
+			</section>
+
+			<section className="card">
+				<h2>Ride Lists</h2>
+				<div className="grid-two">
+					<div className="panel">
+						<h3>Open Rides</h3>
+						<ul className="booking-list">
+							{openRides.map(ride => (
+								<li key={`open-${ride.ride_id}`}>
+									<strong>#{ride.ride_id} Host {ride.host_member_id}</strong>
+									<span>Status: {ride.ride_status}</span>
+									<span>
+										Departure: {new Date(ride.departure_time).toLocaleString()}
+									</span>
+									<span>
+										Seats: {ride.max_capacity} (avail {ride.available_seats})
+									</span>
+								</li>
+							))}
+							{openRides.length === 0 ? <li>No open rides.</li> : null}
+						</ul>
+					</div>
+					<div className="panel">
+						<h3>Active Rides</h3>
+						<ul className="booking-list">
+							{activeRides.map(ride => (
+								<li key={`active-${ride.ride_id}`}>
+									<strong>#{ride.ride_id} Host {ride.host_member_id}</strong>
+									<span>Status: {ride.ride_status}</span>
+									<span>
+										Departure: {new Date(ride.departure_time).toLocaleString()}
+									</span>
+									<span>
+										Seats: {ride.max_capacity} (avail {ride.available_seats})
+									</span>
+								</li>
+							))}
+							{activeRides.length === 0 ? <li>No active rides.</li> : null}
+						</ul>
+					</div>
+				</div>
+				<div className="panel" style={{ marginTop: 12 }}>
+					<h3>Completed Rides</h3>
+					<ul className="booking-list">
+						{completedRides.map(ride => (
+							<li key={`completed-${ride.ride_id}`}>
+								<strong>#{ride.ride_id} Host {ride.host_member_id}</strong>
+								<span>Status: {ride.ride_status}</span>
+								<span>
+									Departure: {new Date(ride.departure_time).toLocaleString()}
+								</span>
+								<span>
+									Seats: {ride.max_capacity} (avail {ride.available_seats})
+								</span>
+							</li>
+						))}
+						{completedRides.length === 0 ? <li>No completed rides.</li> : null}
+					</ul>
+				</div>
+			</section>
 
 			<section className="card">
 				<h2>All Members In System</h2>

@@ -335,13 +335,31 @@ def list_ride_chats(
     ride_id: int,
     admin_credential: AuthCredential = Depends(get_current_admin_credential),
     db: Session = Depends(get_db_session),
-) -> list[RideChatMessage]:
+) -> list[ChatReadResponse]:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
 
     stmt = select(RideChatMessage).where(RideChatMessage.RideID == ride_id).order_by(RideChatMessage.Sent_At.asc())
     messages = list(db.scalars(stmt))
+    member_ids = {message.Sender_MemberID for message in messages}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response: list[ChatReadResponse] = []
+    for message in messages:
+        member = members.get(message.Sender_MemberID)
+        response.append(
+            ChatReadResponse(
+                MessageID=message.MessageID,
+                RideID=message.RideID,
+                Sender_MemberID=message.Sender_MemberID,
+                Sender_Name=member.Full_Name if member else None,
+                Message_Body=message.Message_Body,
+                Sent_At=message.Sent_At,
+            )
+        )
     audit_event(
         action="admin.ride.chats",
         status="success",
@@ -349,7 +367,7 @@ def list_ride_chats(
         actor_username=admin_credential.Username,
         details={"ride_id": ride_id, "messages": len(messages)},
     )
-    return messages
+    return response
 
 
 @router.get("/db-audit/unauthorized", response_model=list[UnauthorizedDbModificationReadResponse])

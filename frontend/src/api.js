@@ -108,4 +108,9 @@ export const api = {
 	listUnauthorizedDbChangesAdmin: (limit = 200) =>
 		request(`/admin/db-audit/unauthorized?limit=${limit}`),
 	listUnauthorizedDbSummaryAdmin: () => request("/admin/db-audit/unauthorized/summary"),
+	listOpenRidesAdmin: () => request("/admin/rides/open"),
+	listActiveRidesAdmin: () => request("/admin/rides/active"),
+	listCompletedRidesAdmin: () => request("/admin/rides/completed"),
+	listRideParticipantsAdmin: rideId => request(`/admin/rides/${rideId}/participants`),
+	listRideChatsAdmin: rideId => request(`/admin/rides/${rideId}/chats`),
 };
