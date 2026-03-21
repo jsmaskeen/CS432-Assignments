@@ -8,22 +8,41 @@ export default function AdminPage() {
 	const [rideStats, setRideStats] = useState(null);
 	const [auditLogs, setAuditLogs] = useState([]);
 	const [auditLimit, setAuditLimit] = useState(200);
+	const [unauthorizedChanges, setUnauthorizedChanges] = useState([]);
+	const [unauthorizedSummary, setUnauthorizedSummary] = useState([]);
+	const [unauthorizedLimit, setUnauthorizedLimit] = useState(200);
 	const [message, setMessage] = useState("");
 
-	async function loadAdminData(limitValue = auditLimit) {
+	async function loadAdminData(
+		auditLimitValue = auditLimit,
+		unauthorizedLimitValue = unauthorizedLimit,
+	) {
 		setMessage("Loading admin data...");
 		try {
-			const [meData, membersData, statsData, logsData] = await Promise.all([
+			const [
+				meData,
+				membersData,
+				statsData,
+				logsData,
+				unauthorizedRows,
+				unauthorizedSummaryRows,
+			] = await Promise.all([
 				api.me(),
 				api.listMembersAdmin(),
 				api.getRideStatsAdmin(),
-				api.listAuditLogsAdmin(limitValue),
+				api.listAuditLogsAdmin(auditLimitValue),
+				api.listUnauthorizedDbChangesAdmin(unauthorizedLimitValue),
+				api.listUnauthorizedDbSummaryAdmin(),
 			]);
 			setCurrentUser(meData);
 			setMembers(membersData);
 			setRideStats(statsData);
 			setAuditLogs(logsData);
-			setMessage(`Loaded ${membersData.length} members and ride stats`);
+			setUnauthorizedChanges(unauthorizedRows);
+			setUnauthorizedSummary(unauthorizedSummaryRows);
+			setMessage(
+				`Loaded ${membersData.length} members, ${logsData.length} audit logs, ${unauthorizedRows.length} unauthorized DB changes`,
+			);
 		} catch (error) {
 			setMessage(error.message);
 		}
@@ -161,7 +180,7 @@ export default function AdminPage() {
 					<button
 						className="btn primary"
 						type="button"
-						onClick={() => loadAdminData(auditLimit)}
+						onClick={() => loadAdminData(auditLimit, unauthorizedLimit)}
 					>
 						Reload Logs
 					</button>
@@ -177,6 +196,72 @@ export default function AdminPage() {
 								{log.actor_member_id ?? "-"})
 							</span>
 							<span>Details: {JSON.stringify(log.details)}</span>
+						</li>
+					))}
+				</ul>
+			</section>
+
+			<section className="card">
+				<h2>Unauthorized Direct DB Changes</h2>
+				<div className="pick-mode">
+					<input
+						type="number"
+						min="1"
+						max="2000"
+						value={unauthorizedLimit}
+						onChange={event => setUnauthorizedLimit(Number(event.target.value || 200))}
+					/>
+					<button
+						className="btn primary"
+						type="button"
+						onClick={() => loadAdminData(auditLimit, unauthorizedLimit)}
+					>
+						Reload Unauthorized
+					</button>
+				</div>
+
+				{unauthorizedSummary.length > 0 ? (
+					<div className="grid-two" style={{ marginTop: 10 }}>
+						{unauthorizedSummary.map(row => (
+							<div key={`${row.table_name}-${row.operation}`} className="stat-card">
+								<h3>
+									{row.table_name} | {row.operation}
+								</h3>
+								<p className="value">{row.total}</p>
+							</div>
+						))}
+					</div>
+				) : (
+					<p className="subtle" style={{ marginTop: 10 }}>
+						No unauthorized DB changes found.
+					</p>
+				)}
+
+				<ul className="booking-list" style={{ marginTop: 10 }}>
+					{unauthorizedChanges.map(change => (
+						<li key={change.log_id}>
+							<strong>
+								#{change.log_id} | {change.created_at} | {change.table_name} |{" "}
+								{change.operation}
+							</strong>
+							<span>
+								PK: {change.primary_key_name}={change.primary_key_value}
+							</span>
+							<span>
+								Source: {change.source_tag} | Authorized:{" "}
+								{String(change.is_authorized)}
+							</span>
+							<span>
+								DB User: {change.db_user} | Conn: {change.connection_id}
+							</span>
+							<span>
+								App: req={change.app_request_id || "-"}, actor=
+								{change.app_actor_username || "-"} (member{" "}
+								{change.app_actor_member_id ?? "-"}, role{" "}
+								{change.app_actor_role || "-"})
+							</span>
+							<span>Old: {JSON.stringify(change.old_values_json || {})}</span>
+							<span>New: {JSON.stringify(change.new_values_json || {})}</span>
 						</li>
 					))}
 				</ul>

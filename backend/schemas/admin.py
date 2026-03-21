@@ -23,11 +23,31 @@ class AdminMemberRoleUpdateRequest(BaseModel):
 
 class AuditLogReadResponse(BaseModel):
     ts: str
+    request_id: str | None = None
     action: str
     status: str
     actor_member_id: int | None = None
     actor_username: str | None = None
     details: dict
+
+
+class UnauthorizedDbModificationReadResponse(BaseModel):
+    log_id: int
+    table_name: str
+    operation: str
+    primary_key_name: str
+    primary_key_value: str
+    db_user: str
+    connection_id: int
+    app_request_id: str | None = None
+    app_actor_member_id: int | None = None
+    app_actor_username: str | None = None
+    app_actor_role: str | None = None
+    source_tag: str
+    is_authorized: bool
+    old_values_json: dict | None = None
+    new_values_json: dict | None = None
+    created_at: datetime
 
 
 class AdminRideStatsResponse(BaseModel):

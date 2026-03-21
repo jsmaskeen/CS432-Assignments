@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config import settings
+from core.request_context import get_request_context
 
 
 def setup_audit_logger() -> None:
@@ -33,12 +34,16 @@ def audit_event(
     actor_username: str | None,
     details: dict[str, Any] | None = None,
 ) -> None:
+    ctx = get_request_context()
+    effective_actor_member_id = actor_member_id if actor_member_id is not None else ctx.actor_member_id
+    effective_actor_username = actor_username if actor_username is not None else ctx.actor_username
     payload = {
         "ts": datetime.now(timezone.utc).isoformat(),
+        "request_id": ctx.request_id,
         "action": action,
         "status": status,
-        "actor_member_id": actor_member_id,
-        "actor_username": actor_username,
+        "actor_member_id": effective_actor_member_id,
+        "actor_username": effective_actor_username,
         "details": details or {},
     }
     logging.getLogger("rajak.audit").info(json.dumps(payload, ensure_ascii=True))
