@@ -13,7 +13,7 @@ from models.booking import Booking
 from models.member import Member
 from models.review import ReputationReview
 from models.ride import Ride
-from schemas.review import ReviewCreateRequest, ReviewReadResponse
+from schemas.review import ReviewCreateRequest, ReviewParticipantResponse, ReviewReadResponse
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 logger = logging.getLogger("rajak.reviews")
@@ -106,6 +106,30 @@ def list_ride_reviews(
 ) -> list[ReputationReview]:
     stmt = select(ReputationReview).where(ReputationReview.RideID == ride_id).order_by(ReputationReview.Created_At.desc())
     return list(db.scalars(stmt))
+
+
+@router.get("/ride/{ride_id}/participants", response_model=list[ReviewParticipantResponse])
+def list_review_participants(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[ReviewParticipantResponse]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Ride_Status != "Completed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not completed")
+
+    participants = _ride_participant_member_ids(ride_id, db)
+    if current_member.MemberID not in participants:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only ride participants can view this list")
+
+    members = list(db.scalars(select(Member).where(Member.MemberID.in_(participants))))
+    response: list[ReviewParticipantResponse] = []
+    for member in members:
+        role = "Host" if member.MemberID == ride.Host_MemberID else "Passenger"
+        response.append(ReviewParticipantResponse(MemberID=member.MemberID, Full_Name=member.Full_Name, Role=role))
+    return response
 
 
 @router.get("/member/{member_id}", response_model=list[ReviewReadResponse])

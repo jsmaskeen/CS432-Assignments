@@ -22,3 +22,9 @@ class ReviewReadResponse(BaseModel):
     Rating: int
     Comments: str | None
     Created_At: datetime
+
+
+class ReviewParticipantResponse(BaseModel):
+    MemberID: int
+    Full_Name: str
+    Role: str

@@ -82,6 +82,7 @@ export const api = {
 		request("/preferences/me", { method: "PUT", body: JSON.stringify(data) }),
 	createReview: data => request("/reviews", { method: "POST", body: JSON.stringify(data) }),
 	listRideReviews: rideId => request(`/reviews/ride/${rideId}`),
+	listRideReviewParticipants: rideId => request(`/reviews/ride/${rideId}/participants`),
 	listMemberReviews: memberId => request(`/reviews/member/${memberId}`),
 	deleteReview: reviewId => request(`/reviews/${reviewId}`, { method: "DELETE" }),
 	updateSettlementStatus: (settlementId, data) =>
