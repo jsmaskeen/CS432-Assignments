@@ -90,6 +90,10 @@ export const api = {
 	mySettlements: () => request("/settlements/my"),
 	getBookingSettlement: bookingId => request(`/settlements/booking/${bookingId}`),
 	listRideChat: rideId => request(`/chat/ride/${rideId}`),
+	chatWebSocketUrl: (rideId, token) => {
+		const base = API_BASE.replace("http://", "ws://").replace("https://", "wss://");
+		return `${base}/chat/ws/ride/${rideId}?token=${encodeURIComponent(token)}`;
+	},
 	listMembersAdmin: () => request("/admin/members"),
 	updateMemberRoleAdmin: (memberId, role) =>
 		request(`/admin/members/${memberId}/role`, {

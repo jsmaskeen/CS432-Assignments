@@ -75,10 +75,29 @@ def list_chat_messages(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> list[RideChatMessage]:
+) -> list[dict[str, object]]:
     _ensure_chat_member(ride_id, current_member.MemberID, db)
     stmt = select(RideChatMessage).where(RideChatMessage.RideID == ride_id).order_by(RideChatMessage.Sent_At.asc())
-    return list(db.scalars(stmt))
+    messages = list(db.scalars(stmt))
+    member_ids = {message.Sender_MemberID for message in messages}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for message in messages:
+        member = members.get(message.Sender_MemberID)
+        response.append(
+            {
+                "MessageID": message.MessageID,
+                "RideID": message.RideID,
+                "Sender_MemberID": message.Sender_MemberID,
+                "Sender_Name": member.Full_Name if member else None,
+                "Message_Body": message.Message_Body,
+                "Sent_At": message.Sent_At,
+            }
+        )
+    return response
 
 
 @router.websocket("/ws/ride/{ride_id}")
@@ -96,6 +115,8 @@ async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
     member_id = int(subject)
     db = SessionLocal()
     try:
+        member = db.scalar(select(Member).where(Member.MemberID == member_id))
+        sender_name = member.Full_Name if member else None
         _ensure_chat_member(ride_id, member_id, db)
         await connection_manager.connect(ride_id, websocket)
         while True:
@@ -136,6 +157,7 @@ async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
                     "MessageID": message.MessageID,
                     "RideID": message.RideID,
                     "Sender_MemberID": message.Sender_MemberID,
+                    "Sender_Name": sender_name,
                     "Message_Body": message.Message_Body,
                     "Sent_At": message.Sent_At.isoformat(),
                 },

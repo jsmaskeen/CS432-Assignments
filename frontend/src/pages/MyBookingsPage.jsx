@@ -127,6 +127,11 @@ export default function MyBookingsPage() {
 											Manage Ride
 										</Link>
 									) : null}
+									{booking.Booking_Status === "Confirmed" || isHost ? (
+										<Link className="btn ghost" to={`/rides/${booking.RideID}/chat`}>
+											Open Chat
+										</Link>
+									) : null}
 									<button
 										className="btn danger"
 										onClick={() => handleDeleteBooking(booking.BookingID)}

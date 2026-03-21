@@ -9,6 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import LocationsPage from "./pages/LocationsPage";
 import ManageRidePage from "./pages/ManageRidePage";
 import MyBookingsPage from "./pages/MyBookingsPage";
+import RideChatPage from "./pages/RideChatPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import ProfilePage from "./pages/ProfilePage";
 import ReviewsPage from "./pages/ReviewsPage";
@@ -125,6 +126,14 @@ export default function App() {
 						element={
 							<RequireAuth user={currentUser}>
 								<ManageRidePage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/rides/:rideId/chat"
+						element={
+							<RequireAuth user={currentUser}>
+								<RideChatPage />
 							</RequireAuth>
 						}
 					/>

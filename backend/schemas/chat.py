@@ -11,5 +11,6 @@ class ChatReadResponse(BaseModel):
     MessageID: int
     RideID: int
     Sender_MemberID: int
+    Sender_Name: str | None = None
     Message_Body: str
     Sent_At: datetime
