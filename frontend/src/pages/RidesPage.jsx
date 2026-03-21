@@ -44,6 +44,24 @@ const startIcon = new L.Icon({
 	popupAnchor: [1, -34],
 });
 
+const bookingPickupIcon = new L.Icon({
+	iconUrl:
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+});
+
+const bookingDropIcon = new L.Icon({
+	iconUrl:
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+});
+
 const smallStartIcon = new L.Icon({
 	iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
 	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -124,10 +142,21 @@ async function fetchNominatimSuggestions(query, userLocation) {
 		.filter(Boolean);
 }
 
-async function fetchRouteData(startPoint, endPoint) {
-	const [sLat, sLng] = startPoint;
-	const [eLat, eLng] = endPoint;
-	const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson`;
+async function fetchRouteData(points) {
+	const coords = points
+		.map(point => {
+			if (!Array.isArray(point) || point.length !== 2) {
+				return null;
+			}
+			const [lat, lng] = point;
+			return `${lng},${lat}`;
+		})
+		.filter(Boolean)
+		.join(";");
+	if (!coords) {
+		return { coordinates: [], distanceMeters: null };
+	}
+	const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
 	const response = await fetch(url);
 	const data = await response.json();
 	const route = data?.routes?.[0];
@@ -165,6 +194,7 @@ export default function RidesPage() {
 	const [bookingPickupSuggestions, setBookingPickupSuggestions] = useState([]);
 	const [bookingDropSuggestions, setBookingDropSuggestions] = useState([]);
 	const [bookingRouteDistanceKm, setBookingRouteDistanceKm] = useState(null);
+	const [bookingRoutePath, setBookingRoutePath] = useState([]);
 	const [bookingDistanceLoading, setBookingDistanceLoading] = useState(false);
 	const [bookingPickTarget, setBookingPickTarget] = useState("pickup");
 	const [rideStartSearchLoading, setRideStartSearchLoading] = useState(false);
@@ -361,7 +391,7 @@ export default function RidesPage() {
 			}
 
 			try {
-				const routeData = await fetchRouteData(selected.start, selected.end);
+				const routeData = await fetchRouteData([selected.start, selected.end]);
 				setSelectedRoute(routeData.coordinates.map(point => [point[1], point[0]]));
 			} catch {
 				setSelectedRoute([]);
@@ -393,7 +423,7 @@ export default function RidesPage() {
 
 			setHostingDistanceLoading(true);
 			try {
-				const routeData = await fetchRouteData(hostStart, hostEnd);
+				const routeData = await fetchRouteData([hostStart, hostEnd]);
 				if (cancelled) {
 					return;
 				}
@@ -441,7 +471,10 @@ export default function RidesPage() {
 
 			setBookingDistanceLoading(true);
 			try {
-				const routeData = await fetchRouteData(bookingPickupPoint, bookingDropPoint);
+				const routeData = await fetchRouteData([
+					bookingPickupPoint,
+					bookingDropPoint,
+				]);
 				const distanceMeters = routeData.distanceMeters;
 				if (cancelled || typeof distanceMeters !== "number") {
 					return;
@@ -466,6 +499,35 @@ export default function RidesPage() {
 			clearTimeout(timer);
 		};
 	}, [bookingForm.pickup_geohash, bookingForm.drop_geohash]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadBookingRoutePath() {
+			if (!selected || !bookingPickupPoint || !bookingDropPoint) {
+				setBookingRoutePath([]);
+				return;
+			}
+			const points = [selected.start, bookingPickupPoint, bookingDropPoint, selected.end];
+			try {
+				const routeData = await fetchRouteData(points);
+				if (cancelled) {
+					return;
+				}
+				setBookingRoutePath(routeData.coordinates.map(point => [point[1], point[0]]));
+			} catch {
+				if (!cancelled) {
+					setBookingRoutePath([]);
+				}
+			}
+		}
+
+		const timer = setTimeout(loadBookingRoutePath, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [selected?.RideID, bookingForm.pickup_geohash, bookingForm.drop_geohash]);
 
 	function Focus({ ride }) {
 		const map = useMap();
@@ -753,39 +815,18 @@ export default function RidesPage() {
 								<div className="chip-row">
 									<button
 										type="button"
-										className={`btn ${bookingPickTarget === "pickup" ? "primary" : "ghost"}`}
+										className="btn ghost"
 										onClick={() => {
 											setActiveMapPicker("booking");
-											setBookingPickTarget("pickup");
+											setBookingPickTarget(prev => (prev === "pickup" ? "drop" : "pickup"));
 										}}
 									>
-										Pick Pickup From Map
-									</button>
-									<button
-										type="button"
-										className={`btn ${bookingPickTarget === "drop" ? "primary" : "ghost"}`}
-										onClick={() => {
-											setActiveMapPicker("booking");
-											setBookingPickTarget("drop");
-										}}
-									>
-										Pick Drop From Map
-									</button>
-									<button
-										type="button"
-										className="btn ghost"
-										onClick={() => openLocationPicker("pickup")}
-									>
-										Pick Pickup From Locations
-									</button>
-									<button
-										type="button"
-										className="btn ghost"
-										onClick={() => openLocationPicker("drop")}
-									>
-										Pick Drop From Locations
+										Select {bookingPickTarget === "pickup" ? "pickup" : "drop"} from map
 									</button>
 								</div>
+								<p className="message">
+									Next map pick: {bookingPickTarget === "pickup" ? "Pickup" : "Drop"}
+								</p>
 								<input
 									placeholder="Pickup location"
 									value={bookingLocations.pickup}
@@ -1091,20 +1132,29 @@ export default function RidesPage() {
 							);
 						})}
 						{bookingPickupPoint ? (
-							<Marker position={bookingPickupPoint} icon={startIcon}>
+							<Marker position={bookingPickupPoint} icon={bookingPickupIcon}>
 								<Popup>
 									Booking pickup ({bookingLocations.pickup || bookingForm.pickup_geohash})
 								</Popup>
 							</Marker>
 						) : null}
 						{bookingDropPoint ? (
-							<Marker position={bookingDropPoint} icon={endIcon}>
+							<Marker position={bookingDropPoint} icon={bookingDropIcon}>
 								<Popup>
 									Booking drop ({bookingLocations.drop || bookingForm.drop_geohash})
 								</Popup>
 							</Marker>
 						) : null}
-						{bookingPickupPoint && bookingDropPoint ? (
+						{bookingRoutePath.length > 0 ? (
+							<Polyline
+								positions={bookingRoutePath}
+								pathOptions={{
+									color: "#7b4dff",
+									weight: 4,
+									opacity: 0.9,
+								}}
+							/>
+						) : bookingPickupPoint && bookingDropPoint ? (
 							<Polyline
 								positions={[bookingPickupPoint, bookingDropPoint]}
 								pathOptions={{
