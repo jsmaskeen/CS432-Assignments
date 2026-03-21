@@ -31,6 +31,8 @@ def list_rides(
     stmt = select(Ride).order_by(Ride.Departure_Time.asc()).limit(limit)
     if only_open:
         stmt = stmt.where(Ride.Ride_Status == "Open")
+    else:
+        stmt = stmt.where(Ride.Ride_Status.in_(["Open", "Full"]))
     return list(db.scalars(stmt))
 
 
