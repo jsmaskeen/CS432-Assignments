@@ -108,6 +108,7 @@ class Plotter:
             ax.set_yscale("log")
             ax.grid(True, which="both", ls="--", alpha=0.5)
         fig.tight_layout(rect=[0, 0, 1, 0.95])  # type:ignore
+        plt.close(fig)
         return fig
 
     def plot_varying_degree(self, n: int, rows: List[List[str | float | int]]):
@@ -130,6 +131,7 @@ class Plotter:
             ax.grid(axis="y", ls="--", alpha=0.5)
 
         fig.tight_layout(rect=[0, 0, 1, 0.93])  # type:ignore
+        plt.close(fig)
         return fig
 
     def plot_key_insertion_order(
@@ -164,10 +166,12 @@ class Plotter:
             ax.set_xticklabels(orderings)
             ax.set_ylabel(title)
             ax.set_title(title)
+            ax.set_yscale('log')
             ax.legend()
             ax.grid(axis="y", ls="--", alpha=0.5)
 
         fig.tight_layout(rect=[0, 0, 1, 0.93])  # type:ignore
+        plt.close(fig)
         return fig
 
     def plot_incremental_insert(self, n: int, res: Dict[str, List[int | float]]):
@@ -199,6 +203,7 @@ class Plotter:
         ax.grid(True, ls="--", alpha=0.5)  # type:ignore
 
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def plot_bulk_delete(self, n: int, d: int, rows: List[List[str | int | float]]):
@@ -221,11 +226,13 @@ class Plotter:
         ax.set_title(f"Bulk Insert + Delete Test (N={n}, degree={d})")  # type:ignore
         ax.legend()  # type:ignore
         ax.grid(axis="y", ls="--", alpha=0.5)  # type:ignore
+        ax.set_yscale('log')
         fig.tight_layout()  # type:ignore
+        plt.close(fig)
         return fig
 
     def plot_range_queries(self, n: int, d: int, rows: List[List[float]]):
-        pcts = [r[0] for r in rows]
+        pcts = [r[0]*100 for r in rows]
         bp_t = [r[1] for r in rows]
         br_t = [r[2] for r in rows]
 
@@ -261,6 +268,7 @@ class Plotter:
         ax.legend()  # type: ignore
         ax.grid(True, ls="--", alpha=0.5)  # type: ignore
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def plot_mixed_load(
@@ -279,6 +287,7 @@ class Plotter:
         )  
         ax.grid(axis="y", ls="--", alpha=0.5)  # type:ignore
         fig.tight_layout()
+        plt.close(fig)
         return fig
     
     def plot_memory_usage(self, rows: List[List[int | str | float]]):
@@ -313,4 +322,5 @@ class Plotter:
         ax.grid(True, ls="--", alpha=0.5)  # type:ignore
         
         fig.tight_layout()
+        plt.close(fig)
         return fig

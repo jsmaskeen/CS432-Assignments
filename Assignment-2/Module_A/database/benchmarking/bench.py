@@ -43,13 +43,14 @@ class PerformanceAnalyzer:
             25600,
             32000,
         ],
-        DEGREES: List[int] = [4, 6, 8, 16, 32, 45],
+        DEGREES: List[int] = [20, 40, 80, 160, 320, 640],
+        DEFAULT_DEGREE: int = 200,
         TRIALS: int = 5,
         RANGE_QUERY_PCT: float = 0.05,
         COLS: List[str] = ["id", "name", "email", "score"],
         PRIMARY_KEY: str = "id",
         RANGES_PCT: List[float] = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5],
-        MEMORY_BENCH_SIZES:np.ndarray = np.arange(2000, 10001, 2000),
+        MEMORY_BENCH_SIZES: np.ndarray = np.arange(2000, 10001, 2000),
         result_folder: str | None = None,
         logfile: str = "analysis.log",
         seed: int = 230709,
@@ -62,6 +63,7 @@ class PerformanceAnalyzer:
         self.PRIMARY_KEY = PRIMARY_KEY
         self.RANGES_PCT = RANGES_PCT
         self.MEMORY_BENCH_SIZES = MEMORY_BENCH_SIZES
+        self.DEFAULT_DEGREE = DEFAULT_DEGREE
         self.logger = logging.Logger("PerformanceAnalysisLogs")
         self.logger.setLevel(logging.INFO)
         open(Path(logfile).expanduser().resolve(strict=False), "w").close()
@@ -142,7 +144,7 @@ class PerformanceAnalyzer:
             columns=self.COLS,
             primary_key=self.PRIMARY_KEY,
             indexer=indexer,
-            degree=degree or self.DEGREES[0],
+            degree=degree or self.DEFAULT_DEGREE,
         )
         return tbl
 
@@ -156,7 +158,7 @@ class PerformanceAnalyzer:
         """
 
         if d is None:
-            d = self.DEGREES[0]
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Scaling size (degree={d})")
         headers = [
             "N",
@@ -300,7 +302,7 @@ class PerformanceAnalyzer:
     def bench_key_insertion_order(self, n: int = 10000, d: int | None = None):
         """compare insert + search performance for sequential, random and reverse ordered key insertion for both bplus and brute"""
         if d is None:
-            d = self.DEGREES[0]
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Key insertion order (N={n}, degree={d})")
         orderings = {
             "sequential": list(range(1, n + 1)),
@@ -351,7 +353,7 @@ class PerformanceAnalyzer:
         """
 
         if d is None:
-            d = self.DEGREES[0]
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Incremental Insert (N={n}, degree={d})")
         keys = list(range(1, n + 1))
         random.shuffle(keys)
@@ -378,11 +380,13 @@ class PerformanceAnalyzer:
 
         return self.plotter.plot_incremental_insert(n, res)
 
-    def bench_bulk_delete(self, n: int = 10000, d: int = 4):
+    def bench_bulk_delete(self, n: int = 10000, d: int | None = None):
         """
         insert a large number of rows then delete it in random order to measure bulk delete performance.
         triggers heavy underflow/merge cascades in the B+ Tree.
         """
+        if d is None:
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Bulk Delete (N={n}, degree={d})")
         keys = list(range(1, n + 1))
         random.shuffle(keys)
@@ -421,11 +425,12 @@ class PerformanceAnalyzer:
         self._write_csv("bulk_delete.csv", headers, rows)
         return self.plotter.plot_bulk_delete(n, d, rows)
 
-    def bench_range_queries(self, n: int = 10000, d: int = 4):
+    def bench_range_queries(self, n: int = 10000, d: int | None = None):
         """
         Do a range query, vary range span from defined low% to high% of key space. And measure times.
         """
-
+        if d is None:
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Range Queries  (N={n}, degree={d})")
         headers = ["range_pct", "bplus_s", "brute_s"]
         rows: List[List[float]] = []
@@ -459,11 +464,15 @@ class PerformanceAnalyzer:
         )
         return self.plotter.plot_range_queries(n, d, rows)
 
-    def bench_mixed_load(self, n: int = 10000, d: int = 4, operations: int = 10000):
+    def bench_mixed_load(
+        self, n: int = 10000, d: int | None = None, operations: int = 10000
+    ):
         """
         Measure time for
         50% search, 20% insert, 15% update, 10% delete, 5% range query
         """
+        if d is None:
+            d = self.DEFAULT_DEGREE
         self.logger.info(f"Mixed Workload  (N={n}, ops={operations}, degree={d})")
 
         headers = ["indexer", "total_s", "ops_per_sec"]
@@ -532,9 +541,11 @@ class PerformanceAnalyzer:
         """
         if sizes is None:
             sizes = self.MEMORY_BENCH_SIZES
-            
-        self.logger.info(f"Memory Usage Scaling (sizes={sizes}, degrees={self.DEGREES})")
-        
+
+        self.logger.info(
+            f"Memory Usage Scaling (sizes={sizes}, degrees={self.DEGREES})"
+        )
+
         headers = ["N", "indexer", "degree", "peak_memory_mb"]
         rows: List[List[int | str | float]] = []
 
@@ -546,12 +557,12 @@ class PerformanceAnalyzer:
             tbl_brute = self.make_table("brute")
             for k in keys:
                 tbl_brute.insert_row(self.make_row(k))
-            
+
             _, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
-            
+
             peak_mb = peak / (1024 * 1024)
-            rows.append([n, "brute", 0, peak_mb]) 
+            rows.append([n, "brute", 0, peak_mb])
             self.logger.info(f"  N={n:>6}  Brute Force    peak_mem={peak_mb:.4f}MB")
 
             # 2. Test B+ Tree across all configured degrees
@@ -560,18 +571,19 @@ class PerformanceAnalyzer:
                 tbl_bp = self.make_table("bplus", d)
                 for k in keys:
                     tbl_bp.insert_row(self.make_row(k))
-                
+
                 _, peak = tracemalloc.get_traced_memory()
                 tracemalloc.stop()
-                
+
                 peak_mb = peak / (1024 * 1024)
                 rows.append([n, "bplus", d, peak_mb])
-                self.logger.info(f"  N={n:>6}  B+Tree (d={d:<2}) peak_mem={peak_mb:.4f}MB")
+                self.logger.info(
+                    f"  N={n:>6}  B+Tree (d={d:<2}) peak_mem={peak_mb:.4f}MB"
+                )
 
         self._write_csv("memory_usage.csv", headers, rows)
-        
-        return self.plotter.plot_memory_usage(rows) 
 
+        return self.plotter.plot_memory_usage(rows)
 
     def run(self):
         figs: Dict[str, Tuple[str, Figure]] = {}
