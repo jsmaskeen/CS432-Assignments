@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
-from core.config import settings
 from db.session import get_db_session
 from models.booking import Booking
 from models.auth_credential import AuthCredential
@@ -69,34 +68,20 @@ def create_ride(
     db.add(ride)
     db.commit()
     db.refresh(ride)
-    admin_credential = None
-    if settings.ADMIN_BOOTSTRAP_USERNAME:
-        admin_credential = db.scalar(
-            select(AuthCredential).where(AuthCredential.Username == settings.ADMIN_BOOTSTRAP_USERNAME)
-        )
-    if admin_credential is None:
-        admin_credential = db.scalar(select(AuthCredential).where(AuthCredential.Role == "admin").order_by(AuthCredential.MemberID.asc()))
-
-    if admin_credential is not None and ride.Available_Seats > 0:
-        admin_booking = Booking(
-            RideID=ride.RideID,
-            Passenger_MemberID=admin_credential.MemberID,
-            Booking_Status="Confirmed",
-            Pickup_GeoHash=ride.Start_GeoHash,
-            Drop_GeoHash=ride.End_GeoHash,
-            Distance_Travelled_KM=Decimal("0.01"),
-        )
-        db.add(admin_booking)
-        ride.Available_Seats -= 1
-        if ride.Available_Seats == 0:
-            ride.Ride_Status = "Full"
-        db.commit()
-        db.refresh(ride)
+    host_booking = Booking(
+        RideID=ride.RideID,
+        Passenger_MemberID=current_member.MemberID,
+        Booking_Status="Confirmed",
+        Pickup_GeoHash=ride.Start_GeoHash,
+        Drop_GeoHash=ride.End_GeoHash,
+        Distance_Travelled_KM=Decimal("0.01"),
+    )
     message = RideChatMessage(
         RideID=ride.RideID,
         Sender_MemberID=current_member.MemberID,
         Message_Body="Ride chat created.",
     )
+    db.add(host_booking)
     db.add(message)
     db.commit()
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
@@ -105,7 +90,7 @@ def create_ride(
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
-        details={"ride_id": ride.RideID, "chat_message_id": message.MessageID},
+        details={"ride_id": ride.RideID, "chat_message_id": message.MessageID, "host_booking_id": host_booking.BookingID},
     )
     return ride
 
@@ -223,6 +208,7 @@ def end_ride(
             select(Booking).where(
                 Booking.RideID == ride.RideID,
                 Booking.Booking_Status == "Confirmed",
+                Booking.Passenger_MemberID != ride.Host_MemberID,
             )
         )
     )

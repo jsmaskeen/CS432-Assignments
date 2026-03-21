@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 import requests
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -64,6 +64,7 @@ def recalculate_ride_route_and_distances(ride: Ride, db: Session) -> int:
             select(Booking).where(
                 Booking.RideID == ride.RideID,
                 Booking.Booking_Status == "Confirmed",
+                Booking.Passenger_MemberID != ride.Host_MemberID,
             )
         )
     )
