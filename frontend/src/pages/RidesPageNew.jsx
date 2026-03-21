@@ -25,7 +25,6 @@ const initialRide = {
 const initialBooking = {
 	pickup_geohash: "",
 	drop_geohash: "",
-	distance_travelled_km: "",
 };
 
 const selectedStartIcon = new L.Icon({
@@ -225,13 +224,11 @@ export default function RidesPageNew() {
 			if (!bookingPickupPoint || !bookingDropPoint) {
 				setBookingDistanceLoading(false);
 				setBookingRouteDistanceKm(null);
-				setBookingForm(prev => ({ ...prev, distance_travelled_km: "" }));
 				return;
 			}
 			if (bookingForm.pickup_geohash === bookingForm.drop_geohash) {
 				setBookingDistanceLoading(false);
 				setBookingRouteDistanceKm(null);
-				setBookingForm(prev => ({ ...prev, distance_travelled_km: "" }));
 				return;
 			}
 
@@ -245,11 +242,9 @@ export default function RidesPageNew() {
 
 				const km = Number((distanceMeters / 1000).toFixed(2));
 				setBookingRouteDistanceKm(km);
-				setBookingForm(prev => ({ ...prev, distance_travelled_km: String(km) }));
 			} catch {
 				if (!cancelled) {
 					setBookingRouteDistanceKm(null);
-					setBookingForm(prev => ({ ...prev, distance_travelled_km: "" }));
 				}
 			} finally {
 				if (!cancelled) {
@@ -287,14 +282,9 @@ export default function RidesPageNew() {
 			setMessage("Select a ride first");
 			return;
 		}
-		if (bookingRouteDistanceKm === null || bookingDistanceLoading) {
-			setMessage("Waiting for route distance from map API. Please try again in a moment.");
-			return;
-		}
 		try {
 			await api.bookRide(selectedId, {
 				...bookingForm,
-				distance_travelled_km: Number(bookingRouteDistanceKm),
 			});
 			setMessage(`Ride #${selectedId} booked successfully`);
 			setBookingForm(initialBooking);
@@ -553,15 +543,6 @@ export default function RidesPageNew() {
 									}
 									required
 								/>
-								<input
-									type="number"
-									min="0.1"
-									step="0.1"
-									placeholder="Distance km"
-									value={bookingForm.distance_travelled_km}
-									readOnly
-									required
-								/>
 								<p className="message">
 									{bookingDistanceLoading
 										? "Calculating route distance..."
@@ -572,9 +553,6 @@ export default function RidesPageNew() {
 								<button
 									className="btn primary"
 									type="submit"
-									disabled={
-										bookingDistanceLoading || bookingRouteDistanceKm === null
-									}
 								>
 									Confirm Booking
 								</button>
