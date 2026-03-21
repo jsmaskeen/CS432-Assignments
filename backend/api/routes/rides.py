@@ -1,15 +1,20 @@
 import logging
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
 from db.session import get_db_session
+from models.booking import Booking
 from models.auth_credential import AuthCredential
+from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
+from models.settlement import CostSettlement
 from schemas.ride import RideCreateRequest, RideReadResponse, RideUpdateRequest
 
 router = APIRouter(prefix="/rides", tags=["rides"])
@@ -61,13 +66,20 @@ def create_ride(
     db.add(ride)
     db.commit()
     db.refresh(ride)
+    message = RideChatMessage(
+        RideID=ride.RideID,
+        Sender_MemberID=current_member.MemberID,
+        Message_Body="Ride chat created.",
+    )
+    db.add(message)
+    db.commit()
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
     audit_event(
         action="rides.create",
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
-        details={"ride_id": ride.RideID},
+        details={"ride_id": ride.RideID, "chat_message_id": message.MessageID},
     )
     return ride
 
@@ -162,14 +174,42 @@ def end_ride(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not started")
 
     ride.Ride_Status = "Completed"
-    db.commit()
+
+    bookings = list(
+        db.scalars(
+            select(Booking).where(
+                Booking.RideID == ride.RideID,
+                Booking.Booking_Status == "Confirmed",
+            )
+        )
+    )
+    created_settlements = 0
+    for booking in bookings:
+        existing = db.scalar(select(CostSettlement).where(CostSettlement.BookingID == booking.BookingID))
+        if existing is not None:
+            continue
+        calculated_cost = (Decimal(booking.Distance_Travelled_KM) * Decimal(ride.Base_Fare_Per_KM)).quantize(Decimal("0.01"))
+        settlement = CostSettlement(
+            BookingID=booking.BookingID,
+            Calculated_Cost=calculated_cost,
+            Payment_Status="Unpaid",
+        )
+        db.add(settlement)
+        created_settlements += 1
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Settlement creation conflict") from exc
+
     db.refresh(ride)
     audit_event(
         action="rides.end",
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
-        details={"ride_id": ride.RideID},
+        details={"ride_id": ride.RideID, "settlements_created": created_settlements},
     )
     return ride
 
