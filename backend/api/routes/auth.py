@@ -5,14 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_admin_credential, get_current_member
+from api.dependencies import get_current_member
 from core.audit import audit_event
 from core.config import settings
 from core.security import create_access_token, hash_password, verify_password
 from db.session import get_db_session
 from models.auth_credential import AuthCredential
 from models.member import Member
-from schemas.auth import AuthTokenResponse, CurrentUserResponse, LoginRequest, PromoteAdminRequest, RegisterRequest
+from schemas.auth import AuthTokenResponse, CurrentUserResponse, LoginRequest, RegisterRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("rajak.auth")
@@ -103,30 +103,3 @@ def me(current_member: Member = Depends(get_current_member), db: Session = Depen
     )
 
 
-@router.post("/admin/promote")
-def promote_to_admin(
-    payload: PromoteAdminRequest,
-    admin_credential: AuthCredential = Depends(get_current_admin_credential),
-    db: Session = Depends(get_db_session),
-) -> dict[str, str]:
-    target = db.scalar(select(AuthCredential).where(AuthCredential.Username == payload.username))
-    if target is None:
-        audit_event(
-            action="auth.promote_admin",
-            status="failed",
-            actor_member_id=admin_credential.MemberID,
-            actor_username=admin_credential.Username,
-            details={"reason": "target_not_found", "target_username": payload.username},
-        )
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found")
-
-    target.Role = "admin"
-    db.commit()
-    audit_event(
-        action="auth.promote_admin",
-        status="success",
-        actor_member_id=admin_credential.MemberID,
-        actor_username=admin_credential.Username,
-        details={"target_username": payload.username},
-    )
-    return {"message": f"{payload.username} promoted to admin"}

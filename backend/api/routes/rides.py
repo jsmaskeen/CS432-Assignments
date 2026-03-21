@@ -6,10 +6,11 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_member
+from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
 from db.session import get_db_session
 from models.booking import Booking
+from models.auth_credential import AuthCredential
 from models.member import Member
 from models.ride import Ride
 from schemas.ride import BookingCreateRequest, BookingReadResponse, RideCreateRequest, RideReadResponse, RideUpdateRequest
@@ -215,3 +216,57 @@ def my_bookings(current_member: Member = Depends(get_current_member), db: Sessio
     logger.info("bookings.my.list member_id=%s", current_member.MemberID)
     stmt = select(Booking).where(Booking.Passenger_MemberID == current_member.MemberID).order_by(Booking.Booked_At.desc())
     return list(db.scalars(stmt))
+
+
+@router.delete("/bookings/{booking_id}")
+def delete_booking(
+    booking_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+    if booking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if booking.Passenger_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
+
+    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    db.delete(booking)
+    if ride is not None:
+        ride.Available_Seats += 1
+        if ride.Ride_Status == "Full":
+            ride.Ride_Status = "Open"
+
+    db.commit()
+    audit_event(
+        action="bookings.delete",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"booking_id": booking_id, "ride_id": booking.RideID},
+    )
+    return {"message": "Booking deleted"}
+
+
+@router.delete("/{ride_id}")
+def delete_ride(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != admin_credential.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host admin can delete this ride")
+
+    db.delete(ride)
+    db.commit()
+    audit_event(
+        action="rides.delete",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id},
+    )
+    return {"message": "Ride deleted"}

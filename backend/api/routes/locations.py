@@ -2,11 +2,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.session import get_db_session
 from models.location import Location
-from schemas.location import LocationReadResponse
+from schemas.location import LocationCreateRequest, LocationReadResponse
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 logger = logging.getLogger("rajak.locations")
@@ -34,4 +35,22 @@ def get_location(location_id: int, db: Session = Depends(get_db_session)) -> Loc
     location = db.scalar(select(Location).where(Location.LocationID == location_id))
     if location is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
+    return location
+
+
+@router.post("", response_model=LocationReadResponse, status_code=status.HTTP_201_CREATED)
+def create_location(payload: LocationCreateRequest, db: Session = Depends(get_db_session)) -> Location:
+    location = Location(
+        Location_Name=payload.location_name.strip(),
+        Location_Type=payload.location_type.strip(),
+        GeoHash=payload.geohash.strip() if payload.geohash else None,
+    )
+    db.add(location)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Location already exists") from exc
+
+    db.refresh(location)
     return location
