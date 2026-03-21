@@ -121,7 +121,33 @@ body {
 
 .auth-page,
 .rides-page {
-	max-width: 1000px;
+	max-width: 1200px;
+}
+
+.map-stage {
+	padding: 0;
+	overflow: hidden;
+}
+
+.map-head {
+	padding: 1rem 1rem 0.3rem;
+}
+
+.map-head h2 {
+	margin: 0;
+}
+
+.map-head p {
+	margin: 0.35rem 0 0;
+	color: var(--muted);
+	font-size: 0.93rem;
+}
+
+.rides-map {
+	height: 80vh;
+	width: 100%;
+	border-radius: 12px;
+	border-top: 1px solid var(--line);
 }
 
 .auth-toggle {
@@ -151,6 +177,12 @@ body {
 
 .form-card.compact {
 	max-width: 100%;
+}
+
+.pick-mode {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
 }
 
 input,
@@ -213,6 +245,16 @@ select {
 	cursor: pointer;
 }
 
+.ride-card a {
+	font-size: 0.85rem;
+	color: #1f62d8;
+	text-decoration: none;
+}
+
+.ride-card a:hover {
+	text-decoration: underline;
+}
+
 .ride-card.selected {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 2px #ffd9cb;
@@ -238,5 +280,9 @@ select {
 	.features,
 	.grid-two {
 		grid-template-columns: 1fr;
+	}
+
+	.rides-map {
+		height: 65vh;
 	}
 }

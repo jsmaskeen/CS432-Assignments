@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
+from core.audit import audit_event
 from db.session import get_db_session
 from models.booking import Booking
 from models.member import Member
@@ -39,6 +40,13 @@ def create_ride(
     logger.info("rides.create.attempt host_member_id=%s", current_member.MemberID)
     if payload.start_geohash == payload.end_geohash:
         logger.warning("rides.create.invalid_route host_member_id=%s", current_member.MemberID)
+        audit_event(
+            action="rides.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "same_geohash"},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start and end geohash cannot be same")
 
     ride = Ride(
@@ -56,6 +64,13 @@ def create_ride(
     db.commit()
     db.refresh(ride)
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
+    audit_event(
+        action="rides.create",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"ride_id": ride.RideID},
+    )
     return ride
 
 
@@ -70,6 +85,13 @@ def create_booking(
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
         logger.warning("bookings.create.ride_not_found ride_id=%s member_id=%s", ride_id, current_member.MemberID)
+        audit_event(
+            action="bookings.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "ride_not_found", "ride_id": ride_id},
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
     if ride.Ride_Status != "Open":
         logger.warning("bookings.create.ride_not_open ride_id=%s status=%s", ride_id, ride.Ride_Status)
@@ -91,6 +113,13 @@ def create_booking(
     )
     if existing is not None:
         logger.warning("bookings.create.duplicate ride_id=%s member_id=%s", ride_id, current_member.MemberID)
+        audit_event(
+            action="bookings.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "duplicate", "ride_id": ride_id},
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already booked this ride")
 
     booking = Booking(
@@ -112,10 +141,24 @@ def create_booking(
     except IntegrityError as exc:
         db.rollback()
         logger.exception("bookings.create.db_conflict ride_id=%s member_id=%s", ride_id, current_member.MemberID)
+        audit_event(
+            action="bookings.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "db_conflict", "ride_id": ride_id},
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Booking failed due to conflict") from exc
 
     db.refresh(booking)
     logger.info("bookings.create.success booking_id=%s ride_id=%s member_id=%s", booking.BookingID, ride_id, current_member.MemberID)
+    audit_event(
+        action="bookings.create",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"booking_id": booking.BookingID, "ride_id": ride_id},
+    )
     return booking
 
 

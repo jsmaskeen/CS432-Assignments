@@ -5,12 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_member
+from api.dependencies import get_current_admin_credential, get_current_member
+from core.audit import audit_event
+from core.config import settings
 from core.security import create_access_token, hash_password, verify_password
 from db.session import get_db_session
 from models.auth_credential import AuthCredential
 from models.member import Member
-from schemas.auth import AuthTokenResponse, CurrentUserResponse, LoginRequest, RegisterRequest
+from schemas.auth import AuthTokenResponse, CurrentUserResponse, LoginRequest, PromoteAdminRequest, RegisterRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("rajak.auth")
@@ -22,11 +24,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db_session)) ->
     existing_username = db.scalar(select(AuthCredential).where(AuthCredential.Username == payload.username))
     if existing_username is not None:
         logger.warning("register.username_conflict username=%s", payload.username)
+        audit_event(action="auth.register", status="failed", actor_member_id=None, actor_username=payload.username, details={"reason": "username_conflict"})
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
 
     existing_email = db.scalar(select(Member).where(Member.Email == payload.email))
     if existing_email is not None:
         logger.warning("register.email_conflict email=%s", payload.email)
+        audit_event(action="auth.register", status="failed", actor_member_id=None, actor_username=payload.username, details={"reason": "email_conflict"})
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
 
     member = Member(
@@ -39,10 +43,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db_session)) ->
     db.add(member)
     db.flush()
 
+    assigned_role = "admin" if settings.ADMIN_BOOTSTRAP_USERNAME and payload.username == settings.ADMIN_BOOTSTRAP_USERNAME else "user"
+
     credential = AuthCredential(
         MemberID=member.MemberID,
         Username=payload.username,
         Password_Hash=hash_password(payload.password),
+        Role=assigned_role,
     )
     db.add(credential)
 
@@ -51,10 +58,18 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db_session)) ->
     except IntegrityError as exc:
         db.rollback()
         logger.exception("register.db_conflict username=%s", payload.username)
+        audit_event(action="auth.register", status="failed", actor_member_id=None, actor_username=payload.username, details={"reason": "db_conflict"})
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User registration conflict") from exc
 
     access_token = create_access_token(str(member.MemberID))
     logger.info("register.success member_id=%s username=%s", member.MemberID, payload.username)
+    audit_event(
+        action="auth.register",
+        status="success",
+        actor_member_id=member.MemberID,
+        actor_username=payload.username,
+        details={"role": assigned_role},
+    )
     return AuthTokenResponse(access_token=access_token)
 
 
@@ -82,6 +97,36 @@ def me(current_member: Member = Depends(get_current_member), db: Session = Depen
     return CurrentUserResponse(
         member_id=current_member.MemberID,
         username=credential.Username,
+        role=credential.Role,
         email=current_member.Email,
         full_name=current_member.Full_Name,
     )
+
+
+@router.post("/admin/promote")
+def promote_to_admin(
+    payload: PromoteAdminRequest,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    target = db.scalar(select(AuthCredential).where(AuthCredential.Username == payload.username))
+    if target is None:
+        audit_event(
+            action="auth.promote_admin",
+            status="failed",
+            actor_member_id=admin_credential.MemberID,
+            actor_username=admin_credential.Username,
+            details={"reason": "target_not_found", "target_username": payload.username},
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target user not found")
+
+    target.Role = "admin"
+    db.commit()
+    audit_event(
+        action="auth.promote_admin",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"target_username": payload.username},
+    )
+    return {"message": f"{payload.username} promoted to admin"}

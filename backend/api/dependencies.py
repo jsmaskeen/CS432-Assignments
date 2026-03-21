@@ -41,3 +41,11 @@ def get_current_credential(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credential not found")
 
     return credential
+
+
+def get_current_admin_credential(
+    credential: AuthCredential = Depends(get_current_credential),
+) -> AuthCredential:
+    if credential.Role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return credential

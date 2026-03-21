@@ -36,6 +36,11 @@ export const api = {
 	register: data => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
 	login: data => request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
 	me: () => request("/auth/me"),
+	promoteToAdmin: username =>
+		request("/auth/admin/promote", {
+			method: "POST",
+			body: JSON.stringify({ username }),
+		}),
 	listRides: () => request("/rides"),
 	createRide: data => request("/rides", { method: "POST", body: JSON.stringify(data) }),
 	bookRide: (rideId, data) =>

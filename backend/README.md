@@ -7,8 +7,10 @@ FastAPI + SQLAlchemy backend with username/password JWT auth and ride booking AP
 - App bootstrap + CORS
 - MySQL connection via SQLAlchemy
 - JWT auth (`register`, `login`, `me`)
+- Role field (`user` / `admin`) in credentials
 - Ride creation/listing/booking APIs
 - Testing endpoints for health and DB connectivity
+- Audit logging to `audit.log` for write operations
 
 ## Quick Start
 
@@ -35,6 +37,18 @@ FastAPI + SQLAlchemy backend with username/password JWT auth and ride booking AP
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `POST /api/v1/auth/admin/promote` (admin only)
+
+## Admin Bootstrap
+
+- Set `ADMIN_BOOTSTRAP_USERNAME` in `.env`.
+- If a user registers with this username, they are assigned `admin` role.
+- Existing user with that username is also promoted at startup.
+
+## Audit File
+
+- Data-modifying API actions append JSON lines to `audit.log`.
+- This lets you compare API-attributed changes with direct DB edits.
 
 ## Ride Endpoints
 

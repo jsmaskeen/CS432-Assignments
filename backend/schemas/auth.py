@@ -30,5 +30,10 @@ class AuthTokenResponse(BaseModel):
 class CurrentUserResponse(BaseModel):
     member_id: int
     username: str
+    role: str
     email: EmailStr
     full_name: str
+
+
+class PromoteAdminRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.-]+$")

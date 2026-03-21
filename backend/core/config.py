@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    AUDIT_LOG_FILE: str = "audit.log"
+    ADMIN_BOOTSTRAP_USERNAME: str = ""
 
     MYSQL_USER: str
     MYSQL_PASSWORD: str

@@ -7,11 +7,13 @@ from fastapi.requests import Request
 from starlette.responses import Response
 
 from api.router import api_router
+from core.audit import setup_audit_logger
 from core.config import settings
 from core.logging_config import setup_logging
 from db.session import init_auth_tables
 
 setup_logging(settings.LOG_LEVEL)
+setup_audit_logger()
 logger = logging.getLogger("rajak.app")
 
 app = FastAPI(title=settings.APP_NAME)
