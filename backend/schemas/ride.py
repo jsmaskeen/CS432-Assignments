@@ -15,6 +15,15 @@ class RideCreateRequest(BaseModel):
     base_fare_per_km: Decimal = Field(gt=0)
 
 
+class RideUpdateRequest(BaseModel):
+    start_geohash: str | None = Field(default=None, min_length=4, max_length=20)
+    end_geohash: str | None = Field(default=None, min_length=4, max_length=20)
+    departure_time: datetime | None = None
+    vehicle_type: str | None = Field(default=None, min_length=2, max_length=50)
+    max_capacity: int | None = Field(default=None, ge=1, le=10)
+    base_fare_per_km: Decimal | None = Field(default=None, gt=0)
+
+
 class RideReadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

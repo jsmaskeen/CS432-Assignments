@@ -12,7 +12,7 @@ from db.session import get_db_session
 from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
-from schemas.ride import BookingCreateRequest, BookingReadResponse, RideCreateRequest, RideReadResponse
+from schemas.ride import BookingCreateRequest, BookingReadResponse, RideCreateRequest, RideReadResponse, RideUpdateRequest
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 logger = logging.getLogger("rajak.rides")
@@ -66,6 +66,54 @@ def create_ride(
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
     audit_event(
         action="rides.create",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"ride_id": ride.RideID},
+    )
+    return ride
+
+
+@router.patch("/{ride_id}", response_model=RideReadResponse)
+def update_ride(
+    ride_id: int,
+    payload: RideUpdateRequest,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> Ride:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can update this ride")
+
+    new_start = payload.start_geohash if payload.start_geohash is not None else ride.Start_GeoHash
+    new_end = payload.end_geohash if payload.end_geohash is not None else ride.End_GeoHash
+    if new_start == new_end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start and end geohash cannot be same")
+
+    if payload.start_geohash is not None:
+        ride.Start_GeoHash = payload.start_geohash
+    if payload.end_geohash is not None:
+        ride.End_GeoHash = payload.end_geohash
+    if payload.departure_time is not None:
+        ride.Departure_Time = payload.departure_time
+    if payload.vehicle_type is not None:
+        ride.Vehicle_Type = payload.vehicle_type
+    if payload.base_fare_per_km is not None:
+        ride.Base_Fare_Per_KM = payload.base_fare_per_km
+
+    if payload.max_capacity is not None:
+        booked_seats = ride.Max_Capacity - ride.Available_Seats
+        if payload.max_capacity < booked_seats:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Max capacity cannot be less than booked seats")
+        ride.Max_Capacity = payload.max_capacity
+        ride.Available_Seats = payload.max_capacity - booked_seats
+
+    db.commit()
+    db.refresh(ride)
+    audit_event(
+        action="rides.update",
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
