@@ -100,6 +100,35 @@ def init_auth_tables() -> None:
     if bootstrap_username:
         with engine.begin() as conn:
             conn.execute(
+                text(
+                    """
+                    SET
+                        @app_request_id = :request_id,
+                        @app_actor_member_id = NULL,
+                        @app_actor_username = :actor_username,
+                        @app_actor_role = :actor_role,
+                        @app_source = 'api'
+                    """
+                ),
+                {
+                    "request_id": "bootstrap-admin-sync",
+                    "actor_username": "system_bootstrap",
+                    "actor_role": "system",
+                },
+            )
+            conn.execute(
                 text("UPDATE Auth_Credentials SET Role='admin' WHERE Username=:username"),
                 {"username": bootstrap_username},
+            )
+            conn.execute(
+                text(
+                    """
+                    SET
+                        @app_request_id = NULL,
+                        @app_actor_member_id = NULL,
+                        @app_actor_username = NULL,
+                        @app_actor_role = NULL,
+                        @app_source = NULL
+                    """
+                )
             )
