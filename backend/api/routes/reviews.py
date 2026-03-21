@@ -1,7 +1,8 @@
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,20 @@ from schemas.review import ReviewCreateRequest, ReviewReadResponse
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 logger = logging.getLogger("rajak.reviews")
+
+
+def _update_reputation_score(member_id: int, db: Session) -> None:
+    avg_rating = db.scalar(
+        select(func.avg(ReputationReview.Rating)).where(ReputationReview.Reviewee_MemberID == member_id)
+    )
+    if avg_rating is None:
+        score = Decimal("0.0")
+    else:
+        score = Decimal(str(avg_rating)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+    member = db.scalar(select(Member).where(Member.MemberID == member_id))
+    if member is not None:
+        member.Reputation_Score = score
 
 
 def _ride_participant_member_ids(ride_id: int, db: Session) -> set[int]:
@@ -64,6 +79,8 @@ def create_review(
         Comments=payload.comments,
     )
     db.add(review)
+    db.flush()
+    _update_reputation_score(payload.reviewee_member_id, db)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -135,7 +152,10 @@ def delete_review(
     if review.Reviewer_MemberID != current_member.MemberID:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the reviewer can delete this review")
 
+    reviewee_id = review.Reviewee_MemberID
     db.delete(review)
+    db.flush()
+    _update_reputation_score(reviewee_id, db)
     db.commit()
     audit_event(
         action="reviews.delete",
