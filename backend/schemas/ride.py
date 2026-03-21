@@ -21,6 +21,7 @@ class RideUpdateRequest(BaseModel):
     departure_time: datetime | None = None
     vehicle_type: str | None = Field(default=None, min_length=2, max_length=50)
     max_capacity: int | None = Field(default=None, ge=1, le=10)
+    filled_seats: int | None = Field(default=None, ge=0)
     base_fare_per_km: Decimal | None = Field(default=None, gt=0)
 
 

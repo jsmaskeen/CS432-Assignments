@@ -51,6 +51,8 @@ export const api = {
 	},
 	getRide: rideId => request(`/rides/${rideId}`),
 	createRide: data => request("/rides", { method: "POST", body: JSON.stringify(data) }),
+	updateRide: (rideId, data) =>
+		request(`/rides/${rideId}`, { method: "PATCH", body: JSON.stringify(data) }),
 	bookRide: (rideId, data) =>
 		request(`/rides/${rideId}/book`, { method: "POST", body: JSON.stringify(data) }),
 	myBookings: () => request("/rides/my/bookings"),

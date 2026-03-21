@@ -2,7 +2,7 @@ import logging
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -66,6 +66,10 @@ def create_ride(
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start and end geohash cannot be same")
 
+    available_seats = payload.max_capacity - 1
+    if available_seats < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Max capacity must be at least 1")
+
     ride = Ride(
         Host_MemberID=current_member.MemberID,
         Start_GeoHash=payload.start_geohash,
@@ -73,9 +77,9 @@ def create_ride(
         Departure_Time=payload.departure_time,
         Vehicle_Type=payload.vehicle_type,
         Max_Capacity=payload.max_capacity,
-        Available_Seats=payload.max_capacity,
+        Available_Seats=available_seats,
         Base_Fare_Per_KM=payload.base_fare_per_km,
-        Ride_Status="Open",
+        Ride_Status="Full" if available_seats == 0 else "Open",
     )
     db.add(ride)
     db.commit()
@@ -147,12 +151,41 @@ def update_ride(
     if payload.base_fare_per_km is not None:
         ride.Base_Fare_Per_KM = payload.base_fare_per_km
 
-    if payload.max_capacity is not None:
+    confirmed_count = (
+        db.scalar(
+            select(func.count(Booking.BookingID)).where(
+                Booking.RideID == ride.RideID,
+                Booking.Booking_Status == "Confirmed",
+                Booking.Passenger_MemberID != ride.Host_MemberID,
+            )
+        )
+        or 0
+    )
+
+    if payload.filled_seats is not None:
+        max_capacity = payload.max_capacity if payload.max_capacity is not None else ride.Max_Capacity
+        if payload.filled_seats < confirmed_count:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Filled seats cannot be less than confirmed bookings",
+            )
+        if payload.filled_seats > max_capacity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Filled seats cannot exceed max capacity",
+            )
+        ride.Max_Capacity = max_capacity
+        ride.Available_Seats = max_capacity - payload.filled_seats
+    elif payload.max_capacity is not None:
         booked_seats = ride.Max_Capacity - ride.Available_Seats
-        if payload.max_capacity < booked_seats:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Max capacity cannot be less than booked seats")
+        min_booked = max(booked_seats, confirmed_count)
+        if payload.max_capacity < min_booked:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Max capacity cannot be less than booked seats",
+            )
         ride.Max_Capacity = payload.max_capacity
-        ride.Available_Seats = payload.max_capacity - booked_seats
+        ride.Available_Seats = payload.max_capacity - min_booked
 
     db.commit()
     db.refresh(ride)

@@ -7,6 +7,7 @@ import AdminPage from "./pages/AdminPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import LocationsPage from "./pages/LocationsPage";
+import ManageRidePage from "./pages/ManageRidePage";
 import MyBookingsPage from "./pages/MyBookingsPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -116,6 +117,14 @@ export default function App() {
 						element={
 							<RequireAuth user={currentUser}>
 								<RidesPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/rides/:rideId/manage"
+						element={
+							<RequireAuth user={currentUser}>
+								<ManageRidePage />
 							</RequireAuth>
 						}
 					/>
