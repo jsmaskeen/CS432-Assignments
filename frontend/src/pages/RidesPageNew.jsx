@@ -117,6 +117,12 @@ export default function RidesPageNew() {
 	const [bookingRouteDistanceKm, setBookingRouteDistanceKm] = useState(null);
 	const [bookingDistanceLoading, setBookingDistanceLoading] = useState(false);
 	const [bookingPickTarget, setBookingPickTarget] = useState("pickup");
+	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+	const [locationPickTarget, setLocationPickTarget] = useState("pickup");
+	const [locationSearch, setLocationSearch] = useState("");
+	const [locationTypeFilter, setLocationTypeFilter] = useState("");
+	const [locationOptions, setLocationOptions] = useState([]);
+	const [locationLoading, setLocationLoading] = useState(false);
 	const [activeMapPicker, setActiveMapPicker] = useState("booking");
 	const [message, setMessage] = useState("");
 
@@ -360,6 +366,46 @@ export default function RidesPageNew() {
 		setMessage(`Picked drop geohash: ${hash}`);
 	}
 
+	async function loadLocationOptions(
+		searchValue = locationSearch,
+		typeValue = locationTypeFilter,
+	) {
+		setLocationLoading(true);
+		try {
+			const data = await api.listLocations({ search: searchValue, location_type: typeValue });
+			setLocationOptions(data || []);
+		} catch (error) {
+			setMessage(error.message || "Failed to load locations");
+		} finally {
+			setLocationLoading(false);
+		}
+	}
+
+	function openLocationPicker(target) {
+		setLocationPickTarget(target);
+		setLocationPickerOpen(true);
+		setLocationSearch("");
+		setLocationTypeFilter("");
+		loadLocationOptions("", "");
+	}
+
+	function applyLocationGeohash(location) {
+		if (!location?.GeoHash) {
+			setMessage("Selected location has no geohash.");
+			return;
+		}
+
+		if (locationPickTarget === "pickup") {
+			setBookingForm(prev => ({ ...prev, pickup_geohash: location.GeoHash }));
+			setMessage(`Pickup set from location: ${location.Location_Name}`);
+		} else {
+			setBookingForm(prev => ({ ...prev, drop_geohash: location.GeoHash }));
+			setMessage(`Drop set from location: ${location.Location_Name}`);
+		}
+
+		setLocationPickerOpen(false);
+	}
+
 	return (
 		<div className="page rides-page">
 			<div className="panel panel-strong">
@@ -469,6 +515,20 @@ export default function RidesPageNew() {
 										}}
 									>
 										Pick Drop From Map
+									</button>
+									<button
+										type="button"
+										className="btn ghost"
+										onClick={() => openLocationPicker("pickup")}
+									>
+										Pick Pickup From Locations
+									</button>
+									<button
+										type="button"
+										className="btn ghost"
+										onClick={() => openLocationPicker("drop")}
+									>
+										Pick Drop From Locations
 									</button>
 								</div>
 								<input
@@ -752,6 +812,85 @@ export default function RidesPageNew() {
 					</MapContainer>
 				</div>
 			</div>
+
+			{locationPickerOpen ? (
+				<div
+					style={{
+						position: "fixed",
+						inset: 0,
+						background: "rgba(0, 0, 0, 0.55)",
+						display: "grid",
+						placeItems: "center",
+						zIndex: 1000,
+					}}
+				>
+					<section
+						className="card"
+						style={{
+							width: "min(780px, 94vw)",
+							maxHeight: "80vh",
+							overflow: "auto",
+							background: "rgba(0, 0, 0, 0.95)",
+						}}
+					>
+						<div className="section-title" style={{ marginBottom: 10 }}>
+							<h3>
+								Pick {locationPickTarget === "pickup" ? "Pickup" : "Drop"} From
+								Locations
+							</h3>
+							<button
+								className="btn ghost"
+								type="button"
+								onClick={() => setLocationPickerOpen(false)}
+							>
+								Close
+							</button>
+						</div>
+						<form
+							className="form-card compact"
+							onSubmit={event => {
+								event.preventDefault();
+								loadLocationOptions();
+							}}
+						>
+							<input
+								placeholder="Search by name"
+								value={locationSearch}
+								onChange={event => setLocationSearch(event.target.value)}
+							/>
+							<input
+								placeholder="Location type (Campus, City, Transport...)"
+								value={locationTypeFilter}
+								onChange={event => setLocationTypeFilter(event.target.value)}
+							/>
+							<button type="submit" className="btn primary">
+								Search
+							</button>
+						</form>
+						<ul className="booking-list" style={{ marginTop: 10 }}>
+							{locationLoading ? <li>Loading locations...</li> : null}
+							{!locationLoading && locationOptions.length === 0 ? (
+								<li>No locations found.</li>
+							) : null}
+							{locationOptions.map(location => (
+								<li key={location.LocationID}>
+									<strong>{location.Location_Name}</strong>
+									<span>Type: {location.Location_Type}</span>
+									<span>GeoHash: {location.GeoHash || "-"}</span>
+									<button
+										type="button"
+										className="btn primary"
+										onClick={() => applyLocationGeohash(location)}
+										disabled={!location.GeoHash}
+									>
+										Use This Location
+									</button>
+								</li>
+							))}
+						</ul>
+					</section>
+				</div>
+			) : null}
 
 			<p className="message">{message}</p>
 		</div>

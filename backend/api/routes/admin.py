@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import MetaData, Table, delete, insert, inspect, select, update
+from sqlalchemy import func, MetaData, Table, delete, insert, inspect, select, update
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_admin_credential
@@ -12,10 +12,13 @@ from core.audit import audit_event
 from core.config import settings
 from db.session import get_db_session
 from models.auth_credential import AuthCredential
+from models.booking import Booking
 from models.member import Member
+from models.ride import Ride
 from schemas.admin import (
     AdminMemberReadResponse,
     AdminMemberRoleUpdateRequest,
+    AdminRideStatsResponse,
     AuditLogReadResponse,
 )
 
@@ -52,6 +55,9 @@ def list_members(
             role=credential.Role,
             email=member.Email,
             full_name=member.Full_Name,
+            reputation_score=float(member.Reputation_Score),
+            phone_number=member.Phone_Number,
+            gender=member.Gender,
             created_at=member.Created_At,
         )
         for member, credential in rows
@@ -90,7 +96,54 @@ def update_member_role(
         role=credential.Role,
         email=member.Email,
         full_name=member.Full_Name,
+        reputation_score=float(member.Reputation_Score),
+        phone_number=member.Phone_Number,
+        gender=member.Gender,
         created_at=member.Created_At,
+    )
+
+
+@router.get("/rides/stats", response_model=AdminRideStatsResponse)
+def ride_stats(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> AdminRideStatsResponse:
+    total_members = db.scalar(select(func.count(Member.MemberID))) or 0
+    total_rides = db.scalar(select(func.count(Ride.RideID))) or 0
+
+    open_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Open")) or 0
+    full_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Full")) or 0
+    cancelled_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Cancelled")) or 0
+    completed_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Completed")) or 0
+
+    total_bookings = db.scalar(select(func.count(Booking.BookingID))) or 0
+    pending_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Pending")) or 0
+    confirmed_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Confirmed")) or 0
+    rejected_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Rejected")) or 0
+    cancelled_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Cancelled")) or 0
+
+    total_capacity_seats = db.scalar(select(func.coalesce(func.sum(Ride.Max_Capacity), 0))) or 0
+    total_available_seats = db.scalar(select(func.coalesce(func.sum(Ride.Available_Seats), 0))) or 0
+    total_booked_seats = max(0, int(total_capacity_seats) - int(total_available_seats))
+
+    average_base_fare = db.scalar(select(func.coalesce(func.avg(Ride.Base_Fare_Per_KM), 0))) or 0
+
+    return AdminRideStatsResponse(
+        total_members=int(total_members),
+        total_rides=int(total_rides),
+        open_rides=int(open_rides),
+        full_rides=int(full_rides),
+        cancelled_rides=int(cancelled_rides),
+        completed_rides=int(completed_rides),
+        total_bookings=int(total_bookings),
+        pending_bookings=int(pending_bookings),
+        confirmed_bookings=int(confirmed_bookings),
+        rejected_bookings=int(rejected_bookings),
+        cancelled_bookings=int(cancelled_bookings),
+        total_capacity_seats=int(total_capacity_seats),
+        total_available_seats=int(total_available_seats),
+        total_booked_seats=total_booked_seats,
+        average_base_fare_per_km=float(average_base_fare),
     )
 
 
