@@ -11,7 +11,7 @@ import MyBookingsPage from "./pages/MyBookingsPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import ProfilePage from "./pages/ProfilePage";
 import ReviewsPage from "./pages/ReviewsPage";
-import RidesPage from "./pages/RidesPageNew";
+import RidesPage from "./pages/RidesPage";
 import SavedLocationsPage from "./pages/SavedLocationsPage";
 import SettlementsPage from "./pages/SettlementsPage";
 
