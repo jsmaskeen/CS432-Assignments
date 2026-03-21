@@ -13,6 +13,7 @@ from db.session import get_db_session
 from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
+from models.ride_participant import RideParticipant
 from schemas.ride import BookingCreateRequest, BookingReadResponse
 
 router = APIRouter(prefix="/rides", tags=["bookings"])
@@ -146,7 +147,16 @@ def delete_booking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
 
     ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    participant = db.scalar(
+        select(RideParticipant).where(
+            RideParticipant.RideID == booking.RideID,
+            RideParticipant.MemberID == booking.Passenger_MemberID,
+            RideParticipant.Role == "Passenger",
+        )
+    )
     db.delete(booking)
+    if participant is not None:
+        db.delete(participant)
     if ride is not None:
         ride.Available_Seats += 1
         if ride.Ride_Status == "Full":
@@ -189,6 +199,20 @@ def accept_booking(
     ride.Available_Seats -= 1
     if ride.Available_Seats == 0:
         ride.Ride_Status = "Full"
+
+    participant = db.scalar(
+        select(RideParticipant).where(
+            RideParticipant.RideID == ride.RideID,
+            RideParticipant.MemberID == booking.Passenger_MemberID,
+        )
+    )
+    if participant is None:
+        participant = RideParticipant(
+            RideID=ride.RideID,
+            MemberID=booking.Passenger_MemberID,
+            Role="Passenger",
+        )
+        db.add(participant)
 
     db.flush()
     try:

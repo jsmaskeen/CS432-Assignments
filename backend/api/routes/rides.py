@@ -11,6 +11,7 @@ from core.audit import audit_event
 from db.session import get_db_session
 from models.booking import Booking
 from models.auth_credential import AuthCredential
+from models.ride_participant import RideParticipant
 from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
@@ -76,12 +77,18 @@ def create_ride(
         Drop_GeoHash=ride.End_GeoHash,
         Distance_Travelled_KM=Decimal("0.01"),
     )
+    host_participant = RideParticipant(
+        RideID=ride.RideID,
+        MemberID=current_member.MemberID,
+        Role="Host",
+    )
     message = RideChatMessage(
         RideID=ride.RideID,
         Sender_MemberID=current_member.MemberID,
         Message_Body="Ride chat created.",
     )
     db.add(host_booking)
+    db.add(host_participant)
     db.add(message)
     db.commit()
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
@@ -90,7 +97,12 @@ def create_ride(
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
-        details={"ride_id": ride.RideID, "chat_message_id": message.MessageID, "host_booking_id": host_booking.BookingID},
+        details={
+            "ride_id": ride.RideID,
+            "chat_message_id": message.MessageID,
+            "host_booking_id": host_booking.BookingID,
+            "host_participant_id": host_participant.ParticipantID,
+        },
     )
     return ride
 
