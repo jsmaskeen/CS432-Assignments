@@ -33,5 +33,6 @@ class CurrentUserResponse(BaseModel):
     role: str
     email: EmailStr
     full_name: str
+    reputation_score: float
 
 

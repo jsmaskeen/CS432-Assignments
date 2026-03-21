@@ -100,6 +100,7 @@ def me(current_member: Member = Depends(get_current_member), db: Session = Depen
         role=credential.Role,
         email=current_member.Email,
         full_name=current_member.Full_Name,
+        reputation_score=float(current_member.Reputation_Score),
     )
 
 

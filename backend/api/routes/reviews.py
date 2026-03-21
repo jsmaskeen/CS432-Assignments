@@ -24,7 +24,7 @@ def _update_reputation_score(member_id: int, db: Session) -> None:
         select(func.avg(ReputationReview.Rating)).where(ReputationReview.Reviewee_MemberID == member_id)
     )
     if avg_rating is None:
-        score = Decimal("0.0")
+        score = Decimal("5.0")
     else:
         score = Decimal(str(avg_rating)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
 
@@ -103,9 +103,32 @@ def list_ride_reviews(
     ride_id: int,
     _: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> list[ReputationReview]:
+) -> list[dict[str, object]]:
     stmt = select(ReputationReview).where(ReputationReview.RideID == ride_id).order_by(ReputationReview.Created_At.desc())
-    return list(db.scalars(stmt))
+    reviews = list(db.scalars(stmt))
+    member_ids = {review.Reviewer_MemberID for review in reviews} | {review.Reviewee_MemberID for review in reviews}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for review in reviews:
+        reviewer = members.get(review.Reviewer_MemberID)
+        reviewee = members.get(review.Reviewee_MemberID)
+        response.append(
+            {
+                "ReviewID": review.ReviewID,
+                "RideID": review.RideID,
+                "Reviewer_MemberID": review.Reviewer_MemberID,
+                "Reviewer_Name": reviewer.Full_Name if reviewer else None,
+                "Reviewee_MemberID": review.Reviewee_MemberID,
+                "Reviewee_Name": reviewee.Full_Name if reviewee else None,
+                "Rating": review.Rating,
+                "Comments": review.Comments,
+                "Created_At": review.Created_At,
+            }
+        )
+    return response
 
 
 @router.get("/ride/{ride_id}/participants", response_model=list[ReviewParticipantResponse])
@@ -137,7 +160,7 @@ def list_member_reviews(
     member_id: int,
     _: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> list[ReputationReview]:
+) -> list[dict[str, object]]:
     stmt = (
         select(ReputationReview)
         .where(
@@ -148,20 +171,66 @@ def list_member_reviews(
         )
         .order_by(ReputationReview.Created_At.desc())
     )
-    return list(db.scalars(stmt))
+    reviews = list(db.scalars(stmt))
+    member_ids = {review.Reviewer_MemberID for review in reviews} | {review.Reviewee_MemberID for review in reviews}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for review in reviews:
+        reviewer = members.get(review.Reviewer_MemberID)
+        reviewee = members.get(review.Reviewee_MemberID)
+        response.append(
+            {
+                "ReviewID": review.ReviewID,
+                "RideID": review.RideID,
+                "Reviewer_MemberID": review.Reviewer_MemberID,
+                "Reviewer_Name": reviewer.Full_Name if reviewer else None,
+                "Reviewee_MemberID": review.Reviewee_MemberID,
+                "Reviewee_Name": reviewee.Full_Name if reviewee else None,
+                "Rating": review.Rating,
+                "Comments": review.Comments,
+                "Created_At": review.Created_At,
+            }
+        )
+    return response
 
 
 @router.get("/my", response_model=list[ReviewReadResponse])
 def list_my_reviews(
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> list[ReputationReview]:
+) -> list[dict[str, object]]:
     stmt = (
         select(ReputationReview)
         .where(ReputationReview.Reviewer_MemberID == current_member.MemberID)
         .order_by(ReputationReview.Created_At.desc())
     )
-    return list(db.scalars(stmt))
+    reviews = list(db.scalars(stmt))
+    member_ids = {review.Reviewer_MemberID for review in reviews} | {review.Reviewee_MemberID for review in reviews}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for review in reviews:
+        reviewer = members.get(review.Reviewer_MemberID)
+        reviewee = members.get(review.Reviewee_MemberID)
+        response.append(
+            {
+                "ReviewID": review.ReviewID,
+                "RideID": review.RideID,
+                "Reviewer_MemberID": review.Reviewer_MemberID,
+                "Reviewer_Name": reviewer.Full_Name if reviewer else None,
+                "Reviewee_MemberID": review.Reviewee_MemberID,
+                "Reviewee_Name": reviewee.Full_Name if reviewee else None,
+                "Rating": review.Rating,
+                "Comments": review.Comments,
+                "Created_At": review.Created_At,
+            }
+        )
+    return response
 
 
 @router.delete("/{review_id}")

@@ -18,7 +18,9 @@ class ReviewReadResponse(BaseModel):
     ReviewID: int
     RideID: int
     Reviewer_MemberID: int
+    Reviewer_Name: str | None = None
     Reviewee_MemberID: int
+    Reviewee_Name: str | None = None
     Rating: int
     Comments: str | None
     Created_At: datetime
