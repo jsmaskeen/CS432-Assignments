@@ -1,6 +1,6 @@
 import React from "react";
 import { useEffect, useState } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import { api, clearToken, getToken } from "./api";
 import AdminPage from "./pages/AdminPage";
@@ -9,11 +9,11 @@ import LoginPage from "./pages/LoginPage";
 import LocationsPage from "./pages/LocationsPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import ReviewsPage from "./pages/ReviewsPage";
-import RidesPage from "./pages/RidesPage";
+import RidesPage from "./pages/RidesPageNew";
 import SettlementsPage from "./pages/SettlementsPage";
 
 export default function App() {
-	const [currentUser, setCurrentUser] = useState(null);
+	const [currentUser, setCurrentUser] = useState(undefined);
 
 	useEffect(() => {
 		async function loadMe() {
@@ -41,40 +41,135 @@ export default function App() {
 	return (
 		<div className="app-shell">
 			<header className="top-nav">
-				<div className="brand">RAJAK</div>
-				<nav>
-					<Link to="/">Home</Link>
+				<div className="brand">
+					<span>RAJAK</span>
+					<span className="brand-pill">Campus</span>
+				</div>
+				<nav className="nav-links">
+					<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/">
+						Home
+					</NavLink>
 					{currentUser ? (
-						<Link to="/auth">Logged in ({currentUser.full_name})</Link>
-					) : (
-						<Link to="/auth">Login/Register</Link>
-					)}
-					<Link to="/rides">Rides</Link>
-					<Link to="/locations">Locations</Link>
-					<Link to="/preferences">Preferences</Link>
-					<Link to="/reviews">Reviews</Link>
-					<Link to="/settlements">Settlements</Link>
-					{currentUser?.role === "admin" ? <Link to="/admin">Admin</Link> : null}
-					{currentUser ? (
-						<button className="btn ghost" type="button" onClick={clearToken}>
-							Logout
-						</button>
+						<>
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/rides">
+								Book
+							</NavLink>
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/locations">
+								Locations
+							</NavLink>
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/preferences">
+								Preferences
+							</NavLink>
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/reviews">
+								Reviews
+							</NavLink>
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/settlements">
+								Settlements
+							</NavLink>
+							{currentUser?.role === "admin" ? (
+								<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/admin">
+									Admin
+								</NavLink>
+							) : null}
+						</>
 					) : null}
 				</nav>
+				<div className="nav-actions">
+					{currentUser ? (
+						<>
+							<Link to="/rides" className="btn primary">
+								Book a ride
+							</Link>
+							<div className="user-chip">
+								<div className="avatar">{currentUser.full_name?.[0] || "U"}</div>
+								<div>
+									<div style={{ fontWeight: 600 }}>{currentUser.full_name || currentUser.username}</div>
+									<div className="small">{currentUser.role}</div>
+								</div>
+								<button className="btn text" type="button" onClick={clearToken}>
+									Logout
+								</button>
+							</div>
+						</>
+					) : (
+						<Link to="/auth" className="btn primary">
+							Login / Register
+						</Link>
+					)}
+				</div>
 			</header>
 
 			<main>
 				<Routes>
 					<Route path="/" element={<HomePage />} />
 					<Route path="/auth" element={<LoginPage />} />
-					<Route path="/rides" element={<RidesPage />} />
-					<Route path="/locations" element={<LocationsPage />} />
-					<Route path="/preferences" element={<PreferencesPage />} />
-					<Route path="/reviews" element={<ReviewsPage />} />
-					<Route path="/settlements" element={<SettlementsPage />} />
-					<Route path="/admin" element={<AdminPage />} />
+					<Route
+						path="/rides"
+						element={
+							<RequireAuth user={currentUser}>
+								<RidesPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/locations"
+						element={
+							<RequireAuth user={currentUser}>
+								<LocationsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/preferences"
+						element={
+							<RequireAuth user={currentUser}>
+								<PreferencesPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/reviews"
+						element={
+							<RequireAuth user={currentUser}>
+								<ReviewsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/settlements"
+						element={
+							<RequireAuth user={currentUser}>
+								<SettlementsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/admin"
+						element={
+							<RequireAuth user={currentUser}>
+								<AdminPage />
+							</RequireAuth>
+						}
+					/>
+					<Route path="*" element={<Navigate to="/" replace />} />
 				</Routes>
 			</main>
 		</div>
 	);
+}
+
+function RequireAuth({ user, children }) {
+	if (user === undefined) {
+		return (
+			<div className="page">
+				<p className="message">Checking session...</p>
+			</div>
+		);
+	}
+
+	if (!user) {
+		return <Navigate to="/auth" replace />;
+	}
+
+	return children;
 }
