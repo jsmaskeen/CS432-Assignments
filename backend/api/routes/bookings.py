@@ -69,16 +69,12 @@ def create_booking(
     booking = Booking(
         RideID=ride_id,
         Passenger_MemberID=current_member.MemberID,
-        Booking_Status="Confirmed",
+        Booking_Status="Pending",
         Pickup_GeoHash=payload.pickup_geohash,
         Drop_GeoHash=payload.drop_geohash,
         Distance_Travelled_KM=Decimal(payload.distance_travelled_km),
     )
     db.add(booking)
-
-    ride.Available_Seats -= 1
-    if ride.Available_Seats == 0:
-        ride.Ride_Status = "Full"
 
     try:
         db.commit()
