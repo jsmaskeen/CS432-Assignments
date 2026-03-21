@@ -20,6 +20,7 @@ from schemas.admin import (
     AdminMemberRoleUpdateRequest,
     AdminRideStatsResponse,
     AuditLogReadResponse,
+    UnauthorizedDbModificationReadResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -171,6 +172,7 @@ def read_audit_logs(
         parsed.append(
             AuditLogReadResponse(
                 ts=str(obj.get("ts", "")),
+                request_id=obj.get("request_id"),
                 action=str(obj.get("action", "unknown")),
                 status=str(obj.get("status", "unknown")),
                 actor_member_id=obj.get("actor_member_id"),
@@ -187,6 +189,128 @@ def read_audit_logs(
         details={"limit": limit, "returned": len(parsed)},
     )
     return parsed
+
+
+@router.get("/db-audit/unauthorized", response_model=list[UnauthorizedDbModificationReadResponse])
+def list_unauthorized_db_modifications(
+    limit: int = Query(default=200, ge=1, le=2000),
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[UnauthorizedDbModificationReadResponse]:
+    table = _get_table("audit_modification_log", db)
+    required_columns = {
+        "log_id",
+        "table_name",
+        "operation",
+        "primary_key_name",
+        "primary_key_value",
+        "db_user",
+        "connection_id",
+        "app_request_id",
+        "app_actor_member_id",
+        "app_actor_username",
+        "app_actor_role",
+        "source_tag",
+        "is_authorized",
+        "old_values_json",
+        "new_values_json",
+        "created_at",
+    }
+    existing_columns = {col.name for col in table.columns}
+    missing = required_columns - existing_columns
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"audit_modification_log missing columns: {', '.join(sorted(missing))}",
+        )
+
+    stmt = (
+        select(table)
+        .where(table.c.is_authorized == 0)
+        .order_by(table.c.log_id.desc())
+        .limit(limit)
+    )
+    rows = list(db.execute(stmt).mappings().all())
+
+    parsed_rows: list[UnauthorizedDbModificationReadResponse] = []
+    for row in rows:
+        old_values = row["old_values_json"]
+        new_values = row["new_values_json"]
+        if isinstance(old_values, str):
+            try:
+                old_values = json.loads(old_values)
+            except json.JSONDecodeError:
+                old_values = None
+        if isinstance(new_values, str):
+            try:
+                new_values = json.loads(new_values)
+            except json.JSONDecodeError:
+                new_values = None
+
+        parsed_rows.append(
+            UnauthorizedDbModificationReadResponse(
+                log_id=int(row["log_id"]),
+                table_name=str(row["table_name"]),
+                operation=str(row["operation"]),
+                primary_key_name=str(row["primary_key_name"]),
+                primary_key_value=str(row["primary_key_value"]),
+                db_user=str(row["db_user"]),
+                connection_id=int(row["connection_id"]),
+                app_request_id=row["app_request_id"],
+                app_actor_member_id=row["app_actor_member_id"],
+                app_actor_username=row["app_actor_username"],
+                app_actor_role=row["app_actor_role"],
+                source_tag=str(row["source_tag"]),
+                is_authorized=bool(row["is_authorized"]),
+                old_values_json=old_values if isinstance(old_values, dict) else None,
+                new_values_json=new_values if isinstance(new_values, dict) else None,
+                created_at=row["created_at"],
+            )
+        )
+
+    audit_event(
+        action="admin.db_audit.unauthorized_read",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"limit": limit, "returned": len(parsed_rows)},
+    )
+    return parsed_rows
+
+
+@router.get("/db-audit/unauthorized/summary")
+def unauthorized_db_modification_summary(
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[dict[str, Any]]:
+    table = _get_table("audit_modification_log", db)
+    stmt = (
+        select(
+            table.c.table_name,
+            table.c.operation,
+            func.count().label("total"),
+        )
+        .where(table.c.is_authorized == 0)
+        .group_by(table.c.table_name, table.c.operation)
+        .order_by(func.count().desc(), table.c.table_name.asc(), table.c.operation.asc())
+    )
+    rows = list(db.execute(stmt).mappings().all())
+    summary = [
+        {
+            "table_name": str(row["table_name"]),
+            "operation": str(row["operation"]),
+            "total": int(row["total"]),
+        }
+        for row in rows
+    ]
+    audit_event(
+        action="admin.db_audit.unauthorized_summary",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"rows": len(summary)},
+    )
+    return summary
 
 
 @router.get("/tables")

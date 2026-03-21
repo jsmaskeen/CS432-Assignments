@@ -88,4 +88,7 @@ export const api = {
 		}),
 	getRideStatsAdmin: () => request("/admin/rides/stats"),
 	listAuditLogsAdmin: (limit = 200) => request(`/admin/audit-logs?limit=${limit}`),
+	listUnauthorizedDbChangesAdmin: (limit = 200) =>
+		request(`/admin/db-audit/unauthorized?limit=${limit}`),
+	listUnauthorizedDbSummaryAdmin: () => request("/admin/db-audit/unauthorized/summary"),
 };
