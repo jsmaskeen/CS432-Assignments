@@ -120,6 +120,60 @@ def update_ride(
     return ride
 
 
+@router.post("/{ride_id}/start", response_model=RideReadResponse)
+def start_ride(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> Ride:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can start this ride")
+    if ride.Ride_Status not in {"Open", "Full"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride cannot be started")
+
+    ride.Ride_Status = "Started"
+    db.commit()
+    db.refresh(ride)
+    audit_event(
+        action="rides.start",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"ride_id": ride.RideID},
+    )
+    return ride
+
+
+@router.post("/{ride_id}/end", response_model=RideReadResponse)
+def end_ride(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> Ride:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can end this ride")
+    if ride.Ride_Status != "Started":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not started")
+
+    ride.Ride_Status = "Completed"
+    db.commit()
+    db.refresh(ride)
+    audit_event(
+        action="rides.end",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"ride_id": ride.RideID},
+    )
+    return ride
+
+
 @router.delete("/{ride_id}")
 def delete_ride(
     ride_id: int,

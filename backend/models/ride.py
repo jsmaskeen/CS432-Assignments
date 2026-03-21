@@ -28,7 +28,7 @@ class Ride(Base):
     Available_Seats: Mapped[int] = mapped_column(nullable=False)
     Base_Fare_Per_KM: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
     Ride_Status: Mapped[str] = mapped_column(
-        SQLEnum("Open", "Full", "Cancelled", "Completed", name="ride_status"),
+        SQLEnum("Open", "Started", "Full", "Cancelled", "Completed", name="ride_status"),
         nullable=False,
         default="Open",
     )
