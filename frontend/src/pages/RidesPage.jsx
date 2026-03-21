@@ -1,7 +1,15 @@
 import React from "react";
 import { useEffect, useState } from "react";
 import geohash from "ngeohash";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import {
+	MapContainer,
+	Marker,
+	Polyline,
+	Popup,
+	TileLayer,
+	useMap,
+	useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 
 import { api } from "../api";
@@ -271,7 +279,9 @@ export default function RidesPage() {
 					<h2>Live Rides Map</h2>
 					<p>
 						Click a ride card to focus the map and mark that ride's start/end locations.
-						A road route overlay and Google Maps link are shown for the selected ride. You can also click on the map to fill geohashes in Create Ride and Book Selected Ride.
+						A road route overlay and Google Maps link are shown for the selected ride.
+						You can also click on the map to fill geohashes in Create Ride and Book
+						Selected Ride.
 					</p>
 				</div>
 				<MapContainer center={mapCenter} zoom={11} className="rides-map">
@@ -317,7 +327,10 @@ export default function RidesPage() {
 						</Marker>
 					) : null}
 					{draftStart && draftEnd ? (
-						<Polyline positions={[draftStart, draftEnd]} pathOptions={{ color: "#34a853", weight: 3 }} />
+						<Polyline
+							positions={[draftStart, draftEnd]}
+							pathOptions={{ color: "#34a853", weight: 3 }}
+						/>
 					) : null}
 					{draftPickup ? (
 						<Marker position={draftPickup} icon={startIcon}>
@@ -330,7 +343,10 @@ export default function RidesPage() {
 						</Marker>
 					) : null}
 					{draftPickup && draftDrop ? (
-						<Polyline positions={[draftPickup, draftDrop]} pathOptions={{ color: "#7b4dff", dashArray: "6 6", weight: 3 }} />
+						<Polyline
+							positions={[draftPickup, draftDrop]}
+							pathOptions={{ color: "#7b4dff", dashArray: "6 6", weight: 3 }}
+						/>
 					) : null}
 
 					{selectedRideRoute.length > 0 ? (
