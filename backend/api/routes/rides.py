@@ -215,3 +215,33 @@ def my_bookings(current_member: Member = Depends(get_current_member), db: Sessio
     logger.info("bookings.my.list member_id=%s", current_member.MemberID)
     stmt = select(Booking).where(Booking.Passenger_MemberID == current_member.MemberID).order_by(Booking.Booked_At.desc())
     return list(db.scalars(stmt))
+
+
+@router.delete("/bookings/{booking_id}")
+def delete_booking(
+    booking_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+    if booking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if booking.Passenger_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
+
+    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    db.delete(booking)
+    if ride is not None:
+        ride.Available_Seats += 1
+        if ride.Ride_Status == "Full":
+            ride.Ride_Status = "Open"
+
+    db.commit()
+    audit_event(
+        action="bookings.delete",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"booking_id": booking_id, "ride_id": booking.RideID},
+    )
+    return {"message": "Booking deleted"}
