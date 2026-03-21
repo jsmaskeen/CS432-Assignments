@@ -96,6 +96,23 @@ def init_auth_tables() -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE Auth_Credentials ADD COLUMN Role VARCHAR(20) NOT NULL DEFAULT 'user'"))
 
+    rides_columns = {col["name"]: col for col in inspector.get_columns("Rides")}
+    ride_status = rides_columns.get("Ride_Status")
+    ride_status_type = (ride_status or {}).get("type")
+    ride_status_str = str(ride_status_type).lower() if ride_status_type else ""
+    if ride_status and "started" not in ride_status_str:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE Rides
+                    MODIFY COLUMN Ride_Status
+                    ENUM('Open','Started','Full','Cancelled','Completed')
+                    NOT NULL DEFAULT 'Open'
+                    """
+                )
+            )
+
     bootstrap_username = settings.ADMIN_BOOTSTRAP_USERNAME.strip()
     if bootstrap_username:
         with engine.begin() as conn:

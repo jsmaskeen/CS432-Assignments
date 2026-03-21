@@ -25,6 +25,7 @@ export default function ManageRidePage() {
 	const [confirmedBookings, setConfirmedBookings] = useState([]);
 	const [confirmedStops, setConfirmedStops] = useState([]);
 	const [message, setMessage] = useState("");
+	const [actionLoading, setActionLoading] = useState(false);
 
 	function distanceKm(a, b) {
 		if (!a || !b) return Number.POSITIVE_INFINITY;
@@ -161,6 +162,23 @@ export default function ManageRidePage() {
 		}
 	}
 
+	async function handleRideAction(action) {
+		if (!rideId) {
+			return;
+		}
+		setActionLoading(true);
+		try {
+			const updated =
+				action === "start" ? await api.startRide(rideId) : await api.endRide(rideId);
+			setRide(updated);
+			setMessage(`Ride ${action === "start" ? "started" : "ended"}`);
+		} catch (error) {
+			setMessage(error.message || `Failed to ${action} ride`);
+		} finally {
+			setActionLoading(false);
+		}
+	}
+
 	function decodeGeohash(geo) {
 		try {
 			const decoded = geohash.decode(geo);
@@ -269,6 +287,24 @@ export default function ManageRidePage() {
 						</button>
 					</div>
 				</div>
+				{ride && ride.Ride_Status !== "Completed" ? (
+					<div className="chip-row" style={{ marginBottom: 12 }}>
+						<span className="pill">Status: {ride.Ride_Status}</span>
+						<button
+							className="btn primary"
+							type="button"
+							onClick={() =>
+								handleRideAction(ride.Ride_Status === "Started" ? "end" : "start")
+							}
+							disabled={
+								actionLoading ||
+								(!["Open", "Full", "Started"].includes(ride.Ride_Status))
+							}
+						>
+							{ride.Ride_Status === "Started" ? "End ride" : "Start ride"}
+						</button>
+					</div>
+				) : null}
 				<form className="form-card compact" onSubmit={handleSubmit}>
 					<label>
 						<span className="input-label">Vehicle type</span>
