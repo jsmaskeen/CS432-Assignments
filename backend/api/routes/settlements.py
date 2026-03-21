@@ -1,9 +1,7 @@
 import logging
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, or_, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
@@ -13,7 +11,7 @@ from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
 from models.settlement import CostSettlement
-from schemas.settlement import SettlementCreateRequest, SettlementReadResponse, SettlementStatusUpdateRequest
+from schemas.settlement import SettlementReadResponse, SettlementStatusUpdateRequest
 
 router = APIRouter(prefix="/settlements", tags=["settlements"])
 logger = logging.getLogger("rajak.settlements")
@@ -36,42 +34,6 @@ def _authorized_booking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this booking settlement")
 
     return booking, ride
-
-
-@router.post("", response_model=SettlementReadResponse, status_code=status.HTTP_201_CREATED)
-def create_settlement(
-    payload: SettlementCreateRequest,
-    current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
-) -> CostSettlement:
-    booking, ride = _authorized_booking(payload.booking_id, current_member.MemberID, db)
-
-    existing = db.scalar(select(CostSettlement).where(CostSettlement.BookingID == booking.BookingID))
-    if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Settlement already exists for this booking")
-
-    calculated_cost = (Decimal(booking.Distance_Travelled_KM) * Decimal(ride.Base_Fare_Per_KM)).quantize(Decimal("0.01"))
-    settlement = CostSettlement(
-        BookingID=booking.BookingID,
-        Calculated_Cost=calculated_cost,
-        Payment_Status="Unpaid",
-    )
-    db.add(settlement)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Settlement creation conflict") from exc
-
-    db.refresh(settlement)
-    audit_event(
-        action="settlements.create",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"settlement_id": settlement.SettlementID, "booking_id": booking.BookingID},
-    )
-    return settlement
 
 
 @router.patch("/{settlement_id}/status", response_model=SettlementReadResponse)
