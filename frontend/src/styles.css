@@ -457,6 +457,7 @@ textarea:focus {
 }
 
 .section-title {
+	color: var(--ink);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
