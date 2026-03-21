@@ -113,6 +113,29 @@ def my_bookings(current_member: Member = Depends(get_current_member), db: Sessio
     return list(db.scalars(stmt))
 
 
+@router.get("/{ride_id}/bookings/pending", response_model=list[BookingReadResponse])
+def list_pending_bookings(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[Booking]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can view pending bookings")
+
+    stmt = (
+        select(Booking)
+        .where(
+            Booking.RideID == ride_id,
+            Booking.Booking_Status == "Pending",
+        )
+        .order_by(Booking.Booked_At.desc())
+    )
+    return list(db.scalars(stmt))
+
+
 @router.delete("/bookings/{booking_id}")
 def delete_booking(
     booking_id: int,
@@ -141,3 +164,73 @@ def delete_booking(
         details={"booking_id": booking_id, "ride_id": booking.RideID},
     )
     return {"message": "Booking deleted"}
+
+
+@router.post("/bookings/{booking_id}/accept", response_model=BookingReadResponse)
+def accept_booking(
+    booking_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> Booking:
+    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+    if booking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can accept bookings")
+    if booking.Booking_Status != "Pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
+    if ride.Ride_Status != "Open":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not open for booking")
+    if ride.Available_Seats <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No seats available")
+
+    booking.Booking_Status = "Confirmed"
+    ride.Available_Seats -= 1
+    if ride.Available_Seats == 0:
+        ride.Ride_Status = "Full"
+
+    db.commit()
+    db.refresh(booking)
+    audit_event(
+        action="bookings.accept",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"booking_id": booking.BookingID, "ride_id": ride.RideID},
+    )
+    return booking
+
+
+@router.post("/bookings/{booking_id}/reject", response_model=BookingReadResponse)
+def reject_booking(
+    booking_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> Booking:
+    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+    if booking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can reject bookings")
+    if booking.Booking_Status != "Pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
+
+    booking.Booking_Status = "Rejected"
+    db.commit()
+    db.refresh(booking)
+    audit_event(
+        action="bookings.reject",
+        status="success",
+        actor_member_id=current_member.MemberID,
+        actor_username=None,
+        details={"booking_id": booking.BookingID, "ride_id": ride.RideID},
+    )
+    return booking
