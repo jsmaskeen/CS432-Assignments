@@ -1,20 +1,51 @@
+import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
 from core.audit import audit_event
+from core.security import decode_access_token
 from db.session import get_db_session
+from db.session import SessionLocal
 from models.booking import Booking
 from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
-from schemas.chat import ChatCreateRequest, ChatReadResponse
+from schemas.chat import ChatReadResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger("rajak.chat")
+
+
+class _ChatConnectionManager:
+    def __init__(self) -> None:
+        self._connections: dict[int, set[WebSocket]] = {}
+
+    async def connect(self, ride_id: int, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._connections.setdefault(ride_id, set()).add(websocket)
+
+    def disconnect(self, ride_id: int, websocket: WebSocket) -> None:
+        connections = self._connections.get(ride_id)
+        if not connections:
+            return
+        connections.discard(websocket)
+        if not connections:
+            self._connections.pop(ride_id, None)
+
+    async def broadcast(self, ride_id: int, payload: dict[str, object]) -> None:
+        connections = list(self._connections.get(ride_id, set()))
+        if not connections:
+            return
+        message = json.dumps(payload, ensure_ascii=True)
+        for connection in connections:
+            await connection.send_text(message)
+
+
+connection_manager = _ChatConnectionManager()
 
 
 def _ensure_chat_member(ride_id: int, member_id: int, db: Session) -> Ride:
@@ -50,27 +81,69 @@ def list_chat_messages(
     return list(db.scalars(stmt))
 
 
-@router.post("/ride/{ride_id}", response_model=ChatReadResponse, status_code=status.HTTP_201_CREATED)
-def create_chat_message(
-    ride_id: int,
-    payload: ChatCreateRequest,
-    current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
-) -> RideChatMessage:
-    _ensure_chat_member(ride_id, current_member.MemberID, db)
-    message = RideChatMessage(
-        RideID=ride_id,
-        Sender_MemberID=current_member.MemberID,
-        Message_Body=payload.message_body.strip(),
-    )
-    db.add(message)
-    db.commit()
-    db.refresh(message)
-    audit_event(
-        action="chat.create",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"ride_id": ride_id, "message_id": message.MessageID},
-    )
-    return message
+@router.websocket("/ws/ride/{ride_id}")
+async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    subject = decode_access_token(token)
+    if subject is None or not subject.isdigit():
+        await websocket.close(code=1008)
+        return
+
+    member_id = int(subject)
+    db = SessionLocal()
+    try:
+        _ensure_chat_member(ride_id, member_id, db)
+        await connection_manager.connect(ride_id, websocket)
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"message_body": raw}
+
+            message_body = str(payload.get("message_body", "")).strip()
+            if not message_body:
+                await websocket.send_text(json.dumps({"error": "message_body is required"}, ensure_ascii=True))
+                continue
+
+            if len(message_body) > 2000:
+                await websocket.send_text(json.dumps({"error": "message_body is too long"}, ensure_ascii=True))
+                continue
+
+            message = RideChatMessage(
+                RideID=ride_id,
+                Sender_MemberID=member_id,
+                Message_Body=message_body,
+            )
+            db.add(message)
+            db.commit()
+            db.refresh(message)
+            audit_event(
+                action="chat.create",
+                status="success",
+                actor_member_id=member_id,
+                actor_username=None,
+                details={"ride_id": ride_id, "message_id": message.MessageID},
+            )
+
+            await connection_manager.broadcast(
+                ride_id,
+                {
+                    "MessageID": message.MessageID,
+                    "RideID": message.RideID,
+                    "Sender_MemberID": message.Sender_MemberID,
+                    "Message_Body": message.Message_Body,
+                    "Sent_At": message.Sent_At.isoformat(),
+                },
+            )
+    except WebSocketDisconnect:
+        connection_manager.disconnect(ride_id, websocket)
+    except HTTPException:
+        await websocket.close(code=1008)
+    finally:
+        connection_manager.disconnect(ride_id, websocket)
+        db.close()

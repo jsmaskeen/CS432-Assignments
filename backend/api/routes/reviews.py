@@ -12,7 +12,7 @@ from models.booking import Booking
 from models.member import Member
 from models.review import ReputationReview
 from models.ride import Ride
-from schemas.review import ReviewCreateRequest, ReviewReadResponse, ReviewUpdateRequest
+from schemas.review import ReviewCreateRequest, ReviewReadResponse
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 logger = logging.getLogger("rajak.reviews")
@@ -82,13 +82,21 @@ def create_review(
 
 
 @router.get("/ride/{ride_id}", response_model=list[ReviewReadResponse])
-def list_ride_reviews(ride_id: int, db: Session = Depends(get_db_session)) -> list[ReputationReview]:
+def list_ride_reviews(
+    ride_id: int,
+    _: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[ReputationReview]:
     stmt = select(ReputationReview).where(ReputationReview.RideID == ride_id).order_by(ReputationReview.Created_At.desc())
     return list(db.scalars(stmt))
 
 
 @router.get("/member/{member_id}", response_model=list[ReviewReadResponse])
-def list_member_reviews(member_id: int, db: Session = Depends(get_db_session)) -> list[ReputationReview]:
+def list_member_reviews(
+    member_id: int,
+    _: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[ReputationReview]:
     stmt = (
         select(ReputationReview)
         .where(
@@ -102,34 +110,17 @@ def list_member_reviews(member_id: int, db: Session = Depends(get_db_session)) -
     return list(db.scalars(stmt))
 
 
-@router.patch("/{review_id}", response_model=ReviewReadResponse)
-def update_review(
-    review_id: int,
-    payload: ReviewUpdateRequest,
+@router.get("/my", response_model=list[ReviewReadResponse])
+def list_my_reviews(
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db_session),
-) -> ReputationReview:
-    review = db.scalar(select(ReputationReview).where(ReputationReview.ReviewID == review_id))
-    if review is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
-    if review.Reviewer_MemberID != current_member.MemberID:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the reviewer can edit this review")
-
-    if payload.rating is not None:
-        review.Rating = payload.rating
-    if payload.comments is not None:
-        review.Comments = payload.comments
-
-    db.commit()
-    db.refresh(review)
-    audit_event(
-        action="reviews.update",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"review_id": review.ReviewID},
+) -> list[ReputationReview]:
+    stmt = (
+        select(ReputationReview)
+        .where(ReputationReview.Reviewer_MemberID == current_member.MemberID)
+        .order_by(ReputationReview.Created_At.desc())
     )
-    return review
+    return list(db.scalars(stmt))
 
 
 @router.delete("/{review_id}")
