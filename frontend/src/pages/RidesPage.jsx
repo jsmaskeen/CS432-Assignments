@@ -97,6 +97,8 @@ export default function RidesPage() {
 	const [currentUser, setCurrentUser] = useState(null);
 	const [rides, setRides] = useState([]);
 	const [myBookings, setMyBookings] = useState([]);
+	const [chatMessages, setChatMessages] = useState([]);
+	const [chatDraft, setChatDraft] = useState("");
 	const [selectedRideRoute, setSelectedRideRoute] = useState([]);
 	const [promoteUsername, setPromoteUsername] = useState("");
 	const [rideForm, setRideForm] = useState(initialRide);
@@ -198,6 +200,23 @@ export default function RidesPage() {
 		loadRoute();
 	}, [selectedRideId, rides]);
 
+	useEffect(() => {
+		async function loadChat() {
+			if (!selectedRideId) {
+				setChatMessages([]);
+				return;
+			}
+			try {
+				const data = await api.listRideChat(selectedRideId);
+				setChatMessages(data);
+			} catch {
+				setChatMessages([]);
+			}
+		}
+
+		loadChat();
+	}, [selectedRideId]);
+
 	async function handleCreateRide(event) {
 		event.preventDefault();
 		setMessage("Creating ride...");
@@ -244,6 +263,28 @@ export default function RidesPage() {
 			const result = await api.promoteToAdmin(promoteUsername);
 			setMessage(result.message || "User promoted");
 			setPromoteUsername("");
+		} catch (error) {
+			setMessage(error.message);
+		}
+	}
+
+	async function handleSendChat(event) {
+		event.preventDefault();
+		if (!selectedRideId) {
+			setMessage("Select a ride first.");
+			return;
+		}
+		if (!chatDraft.trim()) {
+			setMessage("Message cannot be empty.");
+			return;
+		}
+
+		try {
+			await api.sendRideChat(selectedRideId, { message_body: chatDraft.trim() });
+			setChatDraft("");
+			const data = await api.listRideChat(selectedRideId);
+			setChatMessages(data);
+			setMessage("Message sent");
 		} catch (error) {
 			setMessage(error.message);
 		}
@@ -559,6 +600,29 @@ export default function RidesPage() {
 					</ul>
 				</section>
 			</div>
+
+			<section className="card">
+				<h2>Ride Chat {selectedRideId ? `(Ride #${selectedRideId})` : ""}</h2>
+				<form className="form-card compact" onSubmit={handleSendChat}>
+					<input
+						placeholder="Type a message"
+						value={chatDraft}
+						onChange={event => setChatDraft(event.target.value)}
+					/>
+					<button className="btn primary" type="submit">
+						Send Message
+					</button>
+				</form>
+				<ul className="booking-list">
+					{chatMessages.map(messageItem => (
+						<li key={messageItem.MessageID}>
+							<strong>Member #{messageItem.Sender_MemberID}</strong>
+							<span>{messageItem.Message_Body}</span>
+							<span>{new Date(messageItem.Sent_At).toLocaleString()}</span>
+						</li>
+					))}
+				</ul>
+			</section>
 
 			<p className="message">{message}</p>
 		</div>

@@ -22,7 +22,7 @@ export default function HomePage() {
 			<section className="hero">
 				<div className="hero-copy">
 					<p className="eyebrow">Ride Along - Just Act Kool</p>
-					<h1>Cab sharing for IITGN, made calm and colorful.</h1>
+					<h1>Cab sharing for IITGN, made easy.</h1>
 					<p>
 						RAJAK helps students host rides, find seats, and coordinate daily travel
 						with less noise and more clarity.

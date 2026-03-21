@@ -23,8 +23,18 @@ def get_db_session() -> Generator[Session, None, None]:
 
 def init_auth_tables() -> None:
     from models.auth_credential import AuthCredential
+    from models.chat_message import RideChatMessage
+    from models.location import Location
+    from models.preference import UserPreference
+    from models.review import ReputationReview
+    from models.settlement import CostSettlement
 
     AuthCredential.__table__.create(bind=engine, checkfirst=True)
+    Location.__table__.create(bind=engine, checkfirst=True)
+    UserPreference.__table__.create(bind=engine, checkfirst=True)
+    ReputationReview.__table__.create(bind=engine, checkfirst=True)
+    CostSettlement.__table__.create(bind=engine, checkfirst=True)
+    RideChatMessage.__table__.create(bind=engine, checkfirst=True)
 
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("Auth_Credentials")}
