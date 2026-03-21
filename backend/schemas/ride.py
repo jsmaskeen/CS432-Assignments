@@ -47,7 +47,6 @@ class RideWithBookingsResponse(BaseModel):
 class BookingCreateRequest(BaseModel):
     pickup_geohash: str = Field(min_length=4, max_length=20)
     drop_geohash: str = Field(min_length=4, max_length=20)
-    distance_travelled_km: Decimal = Field(gt=0)
 
 
 class BookingReadResponse(BaseModel):

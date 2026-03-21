@@ -42,16 +42,28 @@ export const api = {
 	register: data => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
 	login: data => request("/auth/login", { method: "POST", body: JSON.stringify(data) }),
 	me: () => request("/auth/me"),
-	promoteToAdmin: username =>
-		request("/auth/admin/promote", {
-			method: "POST",
-			body: JSON.stringify({ username }),
-		}),
-	listRides: () => request("/rides"),
+	listRides: ({ only_open = true, limit = 25 } = {}) => {
+		const params = new URLSearchParams();
+		if (only_open !== undefined) params.set("only_open", String(only_open));
+		if (limit) params.set("limit", String(limit));
+		const query = params.toString();
+		return request(`/rides${query ? `?${query}` : ""}`);
+	},
 	createRide: data => request("/rides", { method: "POST", body: JSON.stringify(data) }),
 	bookRide: (rideId, data) =>
 		request(`/rides/${rideId}/book`, { method: "POST", body: JSON.stringify(data) }),
 	myBookings: () => request("/rides/my/bookings"),
+	deleteBooking: bookingId => request(`/rides/bookings/${bookingId}`, { method: "DELETE" }),
+	listPendingBookings: rideId => request(`/rides/${rideId}/bookings/pending`),
+	acceptBooking: bookingId => request(`/rides/bookings/${bookingId}/accept`, { method: "POST" }),
+	rejectBooking: bookingId => request(`/rides/bookings/${bookingId}/reject`, { method: "POST" }),
+	listSavedAddresses: () => request("/saved-addresses"),
+	createSavedAddress: data =>
+		request("/saved-addresses", { method: "POST", body: JSON.stringify(data) }),
+	updateSavedAddress: (addressId, data) =>
+		request(`/saved-addresses/${addressId}`, { method: "PATCH", body: JSON.stringify(data) }),
+	deleteSavedAddress: addressId =>
+		request(`/saved-addresses/${addressId}`, { method: "DELETE" }),
 	listLocations: ({ search = "", location_type = "", limit = 100 } = {}) => {
 		const params = new URLSearchParams();
 		if (search) params.set("search", search);
@@ -65,11 +77,7 @@ export const api = {
 	createReview: data => request("/reviews", { method: "POST", body: JSON.stringify(data) }),
 	listRideReviews: rideId => request(`/reviews/ride/${rideId}`),
 	listMemberReviews: memberId => request(`/reviews/member/${memberId}`),
-	updateReview: (reviewId, data) =>
-		request(`/reviews/${reviewId}`, { method: "PATCH", body: JSON.stringify(data) }),
 	deleteReview: reviewId => request(`/reviews/${reviewId}`, { method: "DELETE" }),
-	createSettlement: data =>
-		request("/settlements", { method: "POST", body: JSON.stringify(data) }),
 	updateSettlementStatus: (settlementId, data) =>
 		request(`/settlements/${settlementId}/status`, {
 			method: "PATCH",
@@ -78,8 +86,6 @@ export const api = {
 	mySettlements: () => request("/settlements/my"),
 	getBookingSettlement: bookingId => request(`/settlements/booking/${bookingId}`),
 	listRideChat: rideId => request(`/chat/ride/${rideId}`),
-	sendRideChat: (rideId, data) =>
-		request(`/chat/ride/${rideId}`, { method: "POST", body: JSON.stringify(data) }),
 	listMembersAdmin: () => request("/admin/members"),
 	updateMemberRoleAdmin: (memberId, role) =>
 		request(`/admin/members/${memberId}/role`, {

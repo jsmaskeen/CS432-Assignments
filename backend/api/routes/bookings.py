@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
 from core.audit import audit_event
+from core.routing import recalculate_ride_route_and_distances
 from db.session import get_db_session
 from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
+from models.ride_participant import RideParticipant
 from schemas.ride import BookingCreateRequest, BookingReadResponse
 
 router = APIRouter(prefix="/rides", tags=["bookings"])
@@ -72,7 +74,7 @@ def create_booking(
         Booking_Status="Pending",
         Pickup_GeoHash=payload.pickup_geohash,
         Drop_GeoHash=payload.drop_geohash,
-        Distance_Travelled_KM=Decimal(payload.distance_travelled_km),
+        Distance_Travelled_KM=Decimal("0.01"),
     )
     db.add(booking)
 
@@ -145,7 +147,33 @@ def delete_booking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
 
     ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    if ride is not None and ride.Host_MemberID == booking.Passenger_MemberID:
+        if ride.Ride_Status in {"Started", "Completed"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete a ride that has started or completed",
+            )
+        db.delete(ride)
+        db.commit()
+        audit_event(
+            action="rides.delete",
+            status="success",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"ride_id": ride.RideID, "trigger": "host_booking_delete"},
+        )
+        return {"message": "Ride deleted"}
+
+    participant = db.scalar(
+        select(RideParticipant).where(
+            RideParticipant.RideID == booking.RideID,
+            RideParticipant.MemberID == booking.Passenger_MemberID,
+            RideParticipant.Role == "Passenger",
+        )
+    )
     db.delete(booking)
+    if participant is not None:
+        db.delete(participant)
     if ride is not None:
         ride.Available_Seats += 1
         if ride.Ride_Status == "Full":
@@ -189,6 +217,27 @@ def accept_booking(
     if ride.Available_Seats == 0:
         ride.Ride_Status = "Full"
 
+    participant = db.scalar(
+        select(RideParticipant).where(
+            RideParticipant.RideID == ride.RideID,
+            RideParticipant.MemberID == booking.Passenger_MemberID,
+        )
+    )
+    if participant is None:
+        participant = RideParticipant(
+            RideID=ride.RideID,
+            MemberID=booking.Passenger_MemberID,
+            Role="Passenger",
+        )
+        db.add(participant)
+
+    db.flush()
+    try:
+        updated = recalculate_ride_route_and_distances(ride, db)
+    except RuntimeError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
     db.commit()
     db.refresh(booking)
     audit_event(
@@ -196,7 +245,7 @@ def accept_booking(
         status="success",
         actor_member_id=current_member.MemberID,
         actor_username=None,
-        details={"booking_id": booking.BookingID, "ride_id": ride.RideID},
+        details={"booking_id": booking.BookingID, "ride_id": ride.RideID, "distances_updated": updated},
     )
     return booking
 

@@ -7,9 +7,12 @@ import AdminPage from "./pages/AdminPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import LocationsPage from "./pages/LocationsPage";
+import MyBookingsPage from "./pages/MyBookingsPage";
 import PreferencesPage from "./pages/PreferencesPage";
+import ProfilePage from "./pages/ProfilePage";
 import ReviewsPage from "./pages/ReviewsPage";
-import RidesPage from "./pages/RidesPageNew";
+import RidesPage from "./pages/RidesPage";
+import SavedLocationsPage from "./pages/SavedLocationsPage";
 import SettlementsPage from "./pages/SettlementsPage";
 
 export default function App() {
@@ -52,19 +55,16 @@ export default function App() {
 					{currentUser ? (
 						<>
 							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/rides">
-								Book
+								Create a booking
 							</NavLink>
-							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/locations">
-								Locations
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/bookings">
+								My Bookings
 							</NavLink>
-							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/preferences">
-								Preferences
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/saved-locations">
+								Saved Locations
 							</NavLink>
-							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/reviews">
-								Reviews
-							</NavLink>
-							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/settlements">
-								Settlements
+							<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/profile">
+								Profile
 							</NavLink>
 							{currentUser?.role === "admin" ? (
 								<NavLink className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} to="/admin">
@@ -104,6 +104,14 @@ export default function App() {
 					<Route path="/" element={<HomePage />} />
 					<Route path="/auth" element={<LoginPage />} />
 					<Route
+						path="/bookings"
+						element={
+							<RequireAuth user={currentUser}>
+								<MyBookingsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
 						path="/rides"
 						element={
 							<RequireAuth user={currentUser}>
@@ -116,6 +124,22 @@ export default function App() {
 						element={
 							<RequireAuth user={currentUser}>
 								<LocationsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/saved-locations"
+						element={
+							<RequireAuth user={currentUser}>
+								<SavedLocationsPage />
+							</RequireAuth>
+						}
+					/>
+					<Route
+						path="/profile"
+						element={
+							<RequireAuth user={currentUser}>
+								<ProfilePage />
 							</RequireAuth>
 						}
 					/>

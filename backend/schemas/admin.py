@@ -66,3 +66,28 @@ class AdminRideStatsResponse(BaseModel):
     total_available_seats: int
     total_booked_seats: int
     average_base_fare_per_km: float
+
+
+class AdminRideReadResponse(BaseModel):
+    ride_id: int
+    host_member_id: int
+    start_geohash: str
+    end_geohash: str
+    departure_time: datetime
+    vehicle_type: str
+    max_capacity: int
+    available_seats: int
+    base_fare_per_km: float
+    ride_status: str
+    created_at: datetime
+
+
+class AdminRideParticipantResponse(BaseModel):
+    member_id: int
+    full_name: str
+    email: EmailStr
+    phone_number: str | None = None
+    gender: str
+    is_host: bool
+    booking_id: int | None = None
+    booking_status: str | None = None

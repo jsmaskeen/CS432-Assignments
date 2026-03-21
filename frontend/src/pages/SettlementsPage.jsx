@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
 export default function SettlementsPage() {
-	const [bookingId, setBookingId] = useState("");
 	const [targetSettlementId, setTargetSettlementId] = useState("");
 	const [paymentStatus, setPaymentStatus] = useState("Settled");
 	const [settlements, setSettlements] = useState([]);
@@ -23,19 +22,6 @@ export default function SettlementsPage() {
 		loadSettlements();
 	}, []);
 
-	async function handleCreate(event) {
-		event.preventDefault();
-		setMessage("Creating settlement...");
-		try {
-			await api.createSettlement({ booking_id: Number(bookingId) });
-			setBookingId("");
-			setMessage("Settlement created");
-			loadSettlements();
-		} catch (error) {
-			setMessage(error.message);
-		}
-	}
-
 	async function handleUpdateStatus(event) {
 		event.preventDefault();
 		setMessage("Updating settlement status...");
@@ -53,23 +39,9 @@ export default function SettlementsPage() {
 
 	return (
 		<div className="page">
-			<section className="grid-two">
-				<form className="card form-card compact" onSubmit={handleCreate}>
-					<h2>Create settlement</h2>
-					<input
-						type="number"
-						placeholder="Booking ID"
-						value={bookingId}
-						onChange={event => setBookingId(event.target.value)}
-						required
-					/>
-					<button className="btn primary" type="submit">
-						Create
-					</button>
-				</form>
-
-				<form className="card form-card compact" onSubmit={handleUpdateStatus}>
-					<h2>Update payment status</h2>
+			<section className="card form-card compact">
+				<h2>Update payment status</h2>
+				<form onSubmit={handleUpdateStatus}>
 					<input
 						type="number"
 						placeholder="Settlement ID"

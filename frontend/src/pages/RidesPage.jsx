@@ -1,17 +1,16 @@
-import React from "react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import geohash from "ngeohash";
 import {
 	MapContainer,
+	TileLayer,
 	Marker,
 	Polyline,
 	Popup,
-	TileLayer,
 	useMap,
 	useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
-
 import { api } from "../api";
 
 const initialRide = {
@@ -26,8 +25,16 @@ const initialRide = {
 const initialBooking = {
 	pickup_geohash: "",
 	drop_geohash: "",
-	distance_travelled_km: "10.0",
 };
+
+const selectedStartIcon = new L.Icon({
+	iconUrl:
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+});
 
 const startIcon = new L.Icon({
 	iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -35,6 +42,32 @@ const startIcon = new L.Icon({
 	iconSize: [25, 41],
 	iconAnchor: [12, 41],
 	popupAnchor: [1, -34],
+});
+
+const bookingPickupIcon = new L.Icon({
+	iconUrl:
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+});
+
+const bookingDropIcon = new L.Icon({
+	iconUrl:
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+	popupAnchor: [1, -34],
+});
+
+const smallStartIcon = new L.Icon({
+	iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+	iconSize: [10, 15],
+	iconAnchor: [9, 30],
+	popupAnchor: [1, -24],
 });
 
 const endIcon = new L.Icon({
@@ -46,28 +79,91 @@ const endIcon = new L.Icon({
 	popupAnchor: [1, -34],
 });
 
-const selectedStartIcon = new L.Icon({
+const smallEndIcon = new L.Icon({
 	iconUrl:
-		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+		"https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
 	shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-	iconSize: [25, 41],
-	iconAnchor: [12, 41],
-	popupAnchor: [1, -34],
+	iconSize: [10, 15],
+	iconAnchor: [9, 30],
+	popupAnchor: [1, -24],
 });
 
-function FocusSelectedRide({ selectedRide }) {
-	const map = useMap();
+function decodeGeohash(geo) {
+	try {
+		const decoded = geohash.decode(geo);
+		return [decoded.latitude, decoded.longitude];
+	} catch {
+		return null;
+	}
+}
 
-	useEffect(() => {
-		if (!selectedRide) {
-			return;
-		}
+async function fetchNominatimSuggestions(query, userLocation) {
+	if (!query) {
+		return [];
+	}
+	const params = new URLSearchParams({
+		format: "json",
+		limit: "5",
+		q: query,
+	});
+	if (userLocation?.lat && userLocation?.lng) {
+		const delta = 0.02;
+		const left = userLocation.lng - delta;
+		const right = userLocation.lng + delta;
+		const top = userLocation.lat + delta;
+		const bottom = userLocation.lat - delta;
+		params.set("viewbox", `${left},${top},${right},${bottom}`);
+		params.set("bounded", "0");
+	}
+	const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+	const response = await fetch(url, {
+		headers: {
+			"Accept-Language": "en",
+		},
+	});
+	if (!response.ok) {
+		return [];
+	}
+	const data = await response.json();
+	return (data || [])
+		.map(item => {
+			const lat = Number(item?.lat);
+			const lng = Number(item?.lon);
+			if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+				return null;
+			}
+			return {
+				id: `nom-${item.place_id}`,
+				label: item.display_name || query,
+				geohash: geohash.encode(lat, lng, 7),
+				source: "Nearby match",
+			};
+		})
+		.filter(Boolean);
+}
 
-		const bounds = L.latLngBounds([selectedRide.start, selectedRide.end]);
-		map.fitBounds(bounds, { padding: [80, 80], maxZoom: 13 });
-	}, [map, selectedRide]);
-
-	return null;
+async function fetchRouteData(points) {
+	const coords = points
+		.map(point => {
+			if (!Array.isArray(point) || point.length !== 2) {
+				return null;
+			}
+			const [lat, lng] = point;
+			return `${lng},${lat}`;
+		})
+		.filter(Boolean)
+		.join(";");
+	if (!coords) {
+		return { coordinates: [], distanceMeters: null };
+	}
+	const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+	const response = await fetch(url);
+	const data = await response.json();
+	const route = data?.routes?.[0];
+	return {
+		coordinates: route?.geometry?.coordinates || [],
+		distanceMeters: route?.distance,
+	};
 }
 
 function MapClickCapture({ onPick }) {
@@ -80,549 +176,1113 @@ function MapClickCapture({ onPick }) {
 	return null;
 }
 
-function decodeGeohash(geo) {
-	try {
-		const decoded = geohash.decode(geo);
-		return [decoded.latitude, decoded.longitude];
-	} catch {
-		return null;
-	}
-}
-
-function toGoogleDirectionsUrl(start, end) {
-	return `https://www.google.com/maps/dir/?api=1&origin=${start[0]},${start[1]}&destination=${end[0]},${end[1]}&travelmode=driving`;
-}
-
 export default function RidesPage() {
-	const [currentUser, setCurrentUser] = useState(null);
 	const [rides, setRides] = useState([]);
-	const [myBookings, setMyBookings] = useState([]);
-	const [chatMessages, setChatMessages] = useState([]);
-	const [chatDraft, setChatDraft] = useState("");
-	const [selectedRideRoute, setSelectedRideRoute] = useState([]);
-	const [promoteUsername, setPromoteUsername] = useState("");
+	const [selectedId, setSelectedId] = useState(null);
+	const [selectedRoute, setSelectedRoute] = useState([]);
+	const [sidebarMode, setSidebarMode] = useState("booking");
 	const [rideForm, setRideForm] = useState(initialRide);
+	const [rideLocations, setRideLocations] = useState({ start: "", end: "" });
+	const [rideStartSuggestions, setRideStartSuggestions] = useState([]);
+	const [rideEndSuggestions, setRideEndSuggestions] = useState([]);
 	const [ridePickTarget, setRidePickTarget] = useState("start");
+	const [hostingRoute, setHostingRoute] = useState([]);
+	const [hostingRouteDistanceKm, setHostingRouteDistanceKm] = useState(null);
+	const [hostingDistanceLoading, setHostingDistanceLoading] = useState(false);
 	const [bookingForm, setBookingForm] = useState(initialBooking);
+	const [bookingLocations, setBookingLocations] = useState({ pickup: "", drop: "" });
+	const [bookingPickupSuggestions, setBookingPickupSuggestions] = useState([]);
+	const [bookingDropSuggestions, setBookingDropSuggestions] = useState([]);
+	const [bookingRouteDistanceKm, setBookingRouteDistanceKm] = useState(null);
+	const [bookingRoutePath, setBookingRoutePath] = useState([]);
+	const [bookingDistanceLoading, setBookingDistanceLoading] = useState(false);
 	const [bookingPickTarget, setBookingPickTarget] = useState("pickup");
-	const [activeMapPicker, setActiveMapPicker] = useState("ride");
-	const [selectedRideId, setSelectedRideId] = useState(null);
+	const [rideStartSearchLoading, setRideStartSearchLoading] = useState(false);
+	const [rideEndSearchLoading, setRideEndSearchLoading] = useState(false);
+	const [bookingPickupSearchLoading, setBookingPickupSearchLoading] = useState(false);
+	const [bookingDropSearchLoading, setBookingDropSearchLoading] = useState(false);
+	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+	const [locationPickTarget, setLocationPickTarget] = useState("pickup");
+	const [locationSearch, setLocationSearch] = useState("");
+	const [locationTypeFilter, setLocationTypeFilter] = useState("");
+	const [locationOptions, setLocationOptions] = useState([]);
+	const [locationLoading, setLocationLoading] = useState(false);
+	const [locationsCatalog, setLocationsCatalog] = useState([]);
+	const [activeMapPicker, setActiveMapPicker] = useState("booking");
 	const [message, setMessage] = useState("");
-
-	const mappedRides = rides
-		.map(ride => {
-			const start = decodeGeohash(ride.Start_GeoHash);
-			const end = decodeGeohash(ride.End_GeoHash);
-			if (!start || !end) {
-				return null;
-			}
-			return { ...ride, start, end };
-		})
-		.filter(Boolean);
-
-	const selectedRide = mappedRides.find(ride => ride.RideID === selectedRideId) || null;
-	const draftStart = decodeGeohash(rideForm.start_geohash);
-	const draftEnd = decodeGeohash(rideForm.end_geohash);
-	const draftPickup = decodeGeohash(bookingForm.pickup_geohash);
-	const draftDrop = decodeGeohash(bookingForm.drop_geohash);
-	const mapCenter = selectedRide?.start || mappedRides[0]?.start || [23.2156, 72.6369]; // IITGN default area
-
-	function handleMapPick(latlng) {
-		const hash = geohash.encode(latlng.lat, latlng.lng, 7);
-
-		if (activeMapPicker === "ride") {
-			setRideForm(previous => {
-				if (ridePickTarget === "start") {
-					return { ...previous, start_geohash: hash };
-				}
-				return { ...previous, end_geohash: hash };
-			});
-
-			setMessage(`Picked ride ${ridePickTarget} geohash: ${hash}`);
-			if (ridePickTarget === "start") {
-				setRidePickTarget("end");
-			}
-			return;
-		}
-
-		setBookingForm(previous => {
-			if (bookingPickTarget === "pickup") {
-				return { ...previous, pickup_geohash: hash };
-			}
-			return { ...previous, drop_geohash: hash };
-		});
-
-		setMessage(`Picked booking ${bookingPickTarget} geohash: ${hash}`);
-		if (bookingPickTarget === "pickup") {
-			setBookingPickTarget("drop");
-		}
-	}
-
-	async function loadData() {
-		try {
-			const [meData, rideData, bookingData] = await Promise.all([
-				api.me(),
-				api.listRides(),
-				api.myBookings(),
-			]);
-			setCurrentUser(meData);
-			setRides(rideData);
-			setMyBookings(bookingData);
-		} catch (error) {
-			setMessage(error.message);
-		}
-	}
+	const [userLocation, setUserLocation] = useState(null);
 
 	useEffect(() => {
-		loadData();
+		api.listRides()
+			.then(r => setRides(r || []))
+			.catch(() => setMessage("Failed to load rides"));
 	}, []);
 
 	useEffect(() => {
-		async function loadRoute() {
-			if (!selectedRide) {
-				setSelectedRideRoute([]);
-				return;
-			}
-
-			const [sLat, sLng] = selectedRide.start;
-			const [eLat, eLng] = selectedRide.end;
-			const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson`;
-			try {
-				const response = await fetch(url);
-				const data = await response.json();
-				const points = data?.routes?.[0]?.geometry?.coordinates || [];
-				setSelectedRideRoute(points.map(point => [point[1], point[0]]));
-			} catch {
-				setSelectedRideRoute([]);
-			}
+		if (!navigator.geolocation) {
+			return;
 		}
-
-		loadRoute();
-	}, [selectedRideId, rides]);
+		navigator.geolocation.getCurrentPosition(
+			position => {
+				setUserLocation({
+					lat: position.coords.latitude,
+					lng: position.coords.longitude,
+				});
+			},
+			() => {
+				// Ignore location errors; suggestions will still work without bias.
+			},
+			{ enableHighAccuracy: false, timeout: 8000 },
+		);
+	}, []);
 
 	useEffect(() => {
-		async function loadChat() {
-			if (!selectedRideId) {
-				setChatMessages([]);
+		let cancelled = false;
+		async function loadLocationsCatalog() {
+			try {
+				const data = await api.listLocations({ limit: 200 });
+				if (!cancelled) {
+					setLocationsCatalog(data || []);
+				}
+			} catch {
+				if (!cancelled) {
+					setLocationsCatalog([]);
+				}
+			}
+		}
+
+		loadLocationsCatalog();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	async function buildLocationSuggestions(query) {
+		const trimmed = query.trim();
+		if (!trimmed) {
+			return [];
+		}
+		const lower = trimmed.toLowerCase();
+		const savedMatches = (locationsCatalog || [])
+			.filter(location => location.Location_Name?.toLowerCase().includes(lower))
+			.slice(0, 5)
+			.map(location => ({
+				id: `saved-${location.LocationID}`,
+				label: location.Location_Name,
+				geohash: location.GeoHash,
+				source: "Saved location",
+			}));
+		const nominatimMatches = await fetchNominatimSuggestions(trimmed, userLocation);
+		const combined = [...savedMatches, ...nominatimMatches];
+		const seen = new Set();
+		return combined.filter(item => {
+			if (!item?.geohash || seen.has(item.geohash)) {
+				return false;
+			}
+			seen.add(item.geohash);
+			return true;
+		});
+	}
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!rideLocations.start.trim()) {
+			setRideStartSuggestions([]);
+			setRideStartSearchLoading(false);
+			return () => {};
+		}
+		setRideStartSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(rideLocations.start);
+			if (!cancelled) {
+				setRideStartSuggestions(suggestions);
+				setRideStartSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [rideLocations.start, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!rideLocations.end.trim()) {
+			setRideEndSuggestions([]);
+			setRideEndSearchLoading(false);
+			return () => {};
+		}
+		setRideEndSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(rideLocations.end);
+			if (!cancelled) {
+				setRideEndSuggestions(suggestions);
+				setRideEndSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [rideLocations.end, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!bookingLocations.pickup.trim()) {
+			setBookingPickupSuggestions([]);
+			setBookingPickupSearchLoading(false);
+			return () => {};
+		}
+		setBookingPickupSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(bookingLocations.pickup);
+			if (!cancelled) {
+				setBookingPickupSuggestions(suggestions);
+				setBookingPickupSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [bookingLocations.pickup, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!bookingLocations.drop.trim()) {
+			setBookingDropSuggestions([]);
+			setBookingDropSearchLoading(false);
+			return () => {};
+		}
+		setBookingDropSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(bookingLocations.drop);
+			if (!cancelled) {
+				setBookingDropSuggestions(suggestions);
+				setBookingDropSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [bookingLocations.drop, locationsCatalog, userLocation]);
+
+	const mappedRides = rides
+		.map(r => {
+			const start = decodeGeohash(r.Start_GeoHash);
+			const end = decodeGeohash(r.End_GeoHash);
+			if (!start || !end) return null;
+			return { ...r, start, end };
+		})
+		.filter(Boolean);
+
+	const selected = mappedRides.find(r => r.RideID === selectedId) || null;
+	const draftStart = decodeGeohash(rideForm.start_geohash);
+	const draftEnd = decodeGeohash(rideForm.end_geohash);
+	const bookingPickupPoint = decodeGeohash(bookingForm.pickup_geohash);
+	const bookingDropPoint = decodeGeohash(bookingForm.drop_geohash);
+
+	useEffect(() => {
+		async function loadSelectedRoute() {
+			if (!selected) {
+				setSelectedRoute([]);
 				return;
 			}
+
 			try {
-				const data = await api.listRideChat(selectedRideId);
-				setChatMessages(data);
+				const routeData = await fetchRouteData([selected.start, selected.end]);
+				setSelectedRoute(routeData.coordinates.map(point => [point[1], point[0]]));
 			} catch {
-				setChatMessages([]);
+				setSelectedRoute([]);
 			}
 		}
 
-		loadChat();
-	}, [selectedRideId]);
+		loadSelectedRoute();
+	}, [selected?.Start_GeoHash, selected?.End_GeoHash]);
 
-	async function handleCreateRide(event) {
-		event.preventDefault();
-		setMessage("Creating ride...");
-		try {
-			await api.createRide({
-				...rideForm,
-				max_capacity: Number(rideForm.max_capacity),
-				base_fare_per_km: Number(rideForm.base_fare_per_km),
-			});
-			setRideForm(initialRide);
-			setMessage("Ride created.");
-			loadData();
-		} catch (error) {
-			setMessage(error.message);
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadHostingRouteDistance() {
+			const hostStart = decodeGeohash(rideForm.start_geohash);
+			const hostEnd = decodeGeohash(rideForm.end_geohash);
+
+			if (!hostStart || !hostEnd) {
+				setHostingDistanceLoading(false);
+				setHostingRouteDistanceKm(null);
+				setHostingRoute([]);
+				return;
+			}
+			if (rideForm.start_geohash === rideForm.end_geohash) {
+				setHostingDistanceLoading(false);
+				setHostingRouteDistanceKm(null);
+				setHostingRoute([]);
+				return;
+			}
+
+			setHostingDistanceLoading(true);
+			try {
+				const routeData = await fetchRouteData([hostStart, hostEnd]);
+				if (cancelled) {
+					return;
+				}
+				const points = routeData.coordinates || [];
+				setHostingRoute(points.map(point => [point[1], point[0]]));
+
+				if (typeof routeData.distanceMeters === "number") {
+					setHostingRouteDistanceKm(Number((routeData.distanceMeters / 1000).toFixed(2)));
+				} else {
+					setHostingRouteDistanceKm(null);
+				}
+			} catch {
+				if (!cancelled) {
+					setHostingRouteDistanceKm(null);
+					setHostingRoute([]);
+				}
+			} finally {
+				if (!cancelled) {
+					setHostingDistanceLoading(false);
+				}
+			}
 		}
+
+		const timer = setTimeout(loadHostingRouteDistance, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [rideForm.start_geohash, rideForm.end_geohash]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadBookingRouteDistance() {
+			if (!bookingPickupPoint || !bookingDropPoint) {
+				setBookingDistanceLoading(false);
+				setBookingRouteDistanceKm(null);
+				return;
+			}
+			if (bookingForm.pickup_geohash === bookingForm.drop_geohash) {
+				setBookingDistanceLoading(false);
+				setBookingRouteDistanceKm(null);
+				return;
+			}
+
+			setBookingDistanceLoading(true);
+			try {
+				const routeData = await fetchRouteData([
+					bookingPickupPoint,
+					bookingDropPoint,
+				]);
+				const distanceMeters = routeData.distanceMeters;
+				if (cancelled || typeof distanceMeters !== "number") {
+					return;
+				}
+
+				const km = Number((distanceMeters / 1000).toFixed(2));
+				setBookingRouteDistanceKm(km);
+			} catch {
+				if (!cancelled) {
+					setBookingRouteDistanceKm(null);
+				}
+			} finally {
+				if (!cancelled) {
+					setBookingDistanceLoading(false);
+				}
+			}
+		}
+
+		const timer = setTimeout(loadBookingRouteDistance, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [bookingForm.pickup_geohash, bookingForm.drop_geohash]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadBookingRoutePath() {
+			if (!selected || !bookingPickupPoint || !bookingDropPoint) {
+				setBookingRoutePath([]);
+				return;
+			}
+			const points = [selected.start, bookingPickupPoint, bookingDropPoint, selected.end];
+			try {
+				const routeData = await fetchRouteData(points);
+				if (cancelled) {
+					return;
+				}
+				setBookingRoutePath(routeData.coordinates.map(point => [point[1], point[0]]));
+			} catch {
+				if (!cancelled) {
+					setBookingRoutePath([]);
+				}
+			}
+		}
+
+		const timer = setTimeout(loadBookingRoutePath, 250);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [selected?.RideID, bookingForm.pickup_geohash, bookingForm.drop_geohash]);
+
+	function Focus({ ride }) {
+		const map = useMap();
+		useEffect(() => {
+			if (!ride || !Array.isArray(ride.start)) return;
+			try {
+				map.fitBounds(L.latLngBounds([ride.start, ride.end]), {
+					padding: [50, 50],
+					maxZoom: 13,
+				});
+			} catch (e) {
+				// ignore
+			}
+		}, [map, ride]);
+		return null;
 	}
 
 	async function handleBookRide(event) {
 		event.preventDefault();
-		if (!selectedRideId) {
-			setMessage("Select a ride first.");
+		if (!selectedId) {
+			setMessage("Select a ride first");
 			return;
 		}
-
-		setMessage("Booking ride...");
+		if (!bookingForm.pickup_geohash || !bookingForm.drop_geohash) {
+			setMessage("Select pickup and drop from the suggestions or map first.");
+			return;
+		}
 		try {
-			await api.bookRide(selectedRideId, {
+			await api.bookRide(selectedId, {
 				...bookingForm,
-				distance_travelled_km: Number(bookingForm.distance_travelled_km),
 			});
+			setMessage(`Ride #${selectedId} booked successfully`);
 			setBookingForm(initialBooking);
-			setSelectedRideId(null);
-			setMessage("Booking successful.");
-			loadData();
+			setBookingLocations({ pickup: "", drop: "" });
+			const refreshed = await api.listRides();
+			setRides(refreshed || []);
 		} catch (error) {
-			setMessage(error.message);
+			setMessage(error.message || "Booking failed");
 		}
 	}
 
-	async function handlePromote(event) {
+	async function handleCreateRide(event) {
 		event.preventDefault();
-		setMessage("Promoting user...");
+		if (!rideForm.start_geohash || !rideForm.end_geohash) {
+			setMessage("Select start and end from the suggestions or map first.");
+			return;
+		}
+		if (hostingRouteDistanceKm === null || hostingDistanceLoading) {
+			setMessage(
+				"Waiting for host route details from map API. Please try again in a moment.",
+			);
+			return;
+		}
+		setMessage("Creating ride...");
 		try {
-			const result = await api.promoteToAdmin(promoteUsername);
-			setMessage(result.message || "User promoted");
-			setPromoteUsername("");
+			await api.createRide({
+				...rideForm,
+				base_fare_per_km: Number(rideForm.base_fare_per_km),
+				max_capacity: Number(rideForm.max_capacity),
+			});
+			setRideForm(initialRide);
+			setRideLocations({ start: "", end: "" });
+			setHostingRoute([]);
+			setHostingRouteDistanceKm(null);
+			setSidebarMode("booking");
+			setMessage("Ride created");
+			const refreshed = await api.listRides();
+			setRides(refreshed || []);
 		} catch (error) {
-			setMessage(error.message);
+			setMessage(error.message || "Ride creation failed");
 		}
 	}
 
-	async function handleSendChat(event) {
-		event.preventDefault();
-		if (!selectedRideId) {
-			setMessage("Select a ride first.");
-			return;
-		}
-		if (!chatDraft.trim()) {
-			setMessage("Message cannot be empty.");
+	function handleMapPick(latlng) {
+		const hash = geohash.encode(latlng.lat, latlng.lng, 7);
+		const label = `Map selection (${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)})`;
+
+		if (activeMapPicker === "ride") {
+			if (!ridePickTarget) {
+				return;
+			}
+			if (ridePickTarget === "start") {
+				setRideForm(prev => ({ ...prev, start_geohash: hash }));
+				setRideLocations(prev => ({ ...prev, start: label }));
+				setRidePickTarget("end");
+				setMessage(`Picked ride start geohash: ${hash}`);
+				return;
+			}
+
+			setRideForm(prev => ({ ...prev, end_geohash: hash }));
+			setRideLocations(prev => ({ ...prev, end: label }));
+			setMessage(`Picked ride end geohash: ${hash}`);
 			return;
 		}
 
-		try {
-			await api.sendRideChat(selectedRideId, { message_body: chatDraft.trim() });
-			setChatDraft("");
-			const data = await api.listRideChat(selectedRideId);
-			setChatMessages(data);
-			setMessage("Message sent");
-		} catch (error) {
-			setMessage(error.message);
+		if (!bookingPickTarget) {
+			return;
 		}
+
+		if (bookingPickTarget === "pickup") {
+			setBookingForm(prev => ({ ...prev, pickup_geohash: hash }));
+			setBookingLocations(prev => ({ ...prev, pickup: label }));
+			setBookingPickTarget("drop");
+			setMessage(`Picked pickup geohash: ${hash}`);
+			return;
+		}
+
+		setBookingForm(prev => ({ ...prev, drop_geohash: hash }));
+		setBookingLocations(prev => ({ ...prev, drop: label }));
+		setMessage(`Picked drop geohash: ${hash}`);
+	}
+
+	function applySuggestionToBooking(target, suggestion) {
+		if (!suggestion?.geohash) {
+			setMessage("Selected suggestion has no geohash.");
+			return;
+		}
+		if (target === "pickup") {
+			setBookingForm(prev => ({ ...prev, pickup_geohash: suggestion.geohash }));
+			setBookingLocations(prev => ({ ...prev, pickup: suggestion.label }));
+			setBookingPickupSuggestions([]);
+			setMessage(`Pickup set: ${suggestion.label}`);
+			return;
+		}
+		setBookingForm(prev => ({ ...prev, drop_geohash: suggestion.geohash }));
+		setBookingLocations(prev => ({ ...prev, drop: suggestion.label }));
+		setBookingDropSuggestions([]);
+		setMessage(`Drop set: ${suggestion.label}`);
+	}
+
+	function applySuggestionToRide(target, suggestion) {
+		if (!suggestion?.geohash) {
+			setMessage("Selected suggestion has no geohash.");
+			return;
+		}
+		if (target === "start") {
+			setRideForm(prev => ({ ...prev, start_geohash: suggestion.geohash }));
+			setRideLocations(prev => ({ ...prev, start: suggestion.label }));
+			setRideStartSuggestions([]);
+			setMessage(`Start set: ${suggestion.label}`);
+			return;
+		}
+		setRideForm(prev => ({ ...prev, end_geohash: suggestion.geohash }));
+		setRideLocations(prev => ({ ...prev, end: suggestion.label }));
+		setRideEndSuggestions([]);
+		setMessage(`End set: ${suggestion.label}`);
+	}
+
+	async function loadLocationOptions(
+		searchValue = locationSearch,
+		typeValue = locationTypeFilter,
+	) {
+		setLocationLoading(true);
+		try {
+			const data = await api.listLocations({ search: searchValue, location_type: typeValue });
+			setLocationOptions(data || []);
+		} catch (error) {
+			setMessage(error.message || "Failed to load locations");
+		} finally {
+			setLocationLoading(false);
+		}
+	}
+
+	function openLocationPicker(target) {
+		setLocationPickTarget(target);
+		setLocationPickerOpen(true);
+		setLocationSearch("");
+		setLocationTypeFilter("");
+		loadLocationOptions("", "");
+	}
+
+	function applyLocationGeohash(location) {
+		if (!location?.GeoHash) {
+			setMessage("Selected location has no geohash.");
+			return;
+		}
+
+		if (locationPickTarget === "pickup") {
+			setBookingForm(prev => ({ ...prev, pickup_geohash: location.GeoHash }));
+			setBookingLocations(prev => ({ ...prev, pickup: location.Location_Name || "" }));
+			setMessage(`Pickup set from location: ${location.Location_Name}`);
+		} else {
+			setBookingForm(prev => ({ ...prev, drop_geohash: location.GeoHash }));
+			setBookingLocations(prev => ({ ...prev, drop: location.Location_Name || "" }));
+			setMessage(`Drop set from location: ${location.Location_Name}`);
+		}
+
+		setLocationPickerOpen(false);
 	}
 
 	return (
 		<div className="page rides-page">
-			{currentUser ? (
-				<p className="message">
-					Logged in as {currentUser.username} ({currentUser.role})
-				</p>
-			) : null}
-
-			{currentUser?.role === "admin" ? (
-				<section className="card">
-					<h2>Admin actions</h2>
-					<form className="form-card compact" onSubmit={handlePromote}>
-						<input
-							placeholder="Username to promote"
-							value={promoteUsername}
-							onChange={e => setPromoteUsername(e.target.value)}
-							required
-						/>
-						<button className="btn primary" type="submit">
-							Promote To Admin
-						</button>
-					</form>
-				</section>
-			) : null}
-
-			<section className="card map-stage">
-				<div className="map-head">
-					<h2>Live Rides Map</h2>
-					<p>
-						Click a ride card to focus the map and mark that ride's start/end locations.
-						A road route overlay and Google Maps link are shown for the selected ride.
-						You can also click on the map to fill geohashes in Create Ride and Book
-						Selected Ride.
-					</p>
+			<div className="panel panel-strong">
+				<div className="section-title">
+					<div>
+						<p className="eyebrow">Book & host</p>
+						<h2>Live rides</h2>
+					</div>
+					<div className="chip-row">
+						<Link to="/" className="btn ghost">
+							Home
+						</Link>
+						<Link to="/auth" className="btn primary">
+							Login / Switch
+						</Link>
+					</div>
 				</div>
-				<MapContainer center={mapCenter} zoom={11} className="rides-map">
-					<TileLayer
-						attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-						url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-					/>
-					<FocusSelectedRide selectedRide={selectedRide} />
-					<MapClickCapture onPick={handleMapPick} />
+			</div>
 
-					{mappedRides.map(ride => (
-						<React.Fragment key={`map-${ride.RideID}`}>
+			<div className="rides-layout">
+				<div className="stack">
+					<section className="card panel">
+						<div className="section-title">
+							<h3>Available rides</h3>
+							<span className="pill">{rides.length}</span>
+						</div>
+						<div className="chip-row" style={{ marginBottom: 12 }}>
+							<button
+								type="button"
+								className={`btn ${sidebarMode === "booking" ? "primary" : "ghost"}`}
+								onClick={() => {
+									setSidebarMode("booking");
+									setActiveMapPicker("booking");
+								}}
+							>
+								Booking
+							</button>
+							<button
+								type="button"
+								className={`btn ${sidebarMode === "hosting" ? "primary" : "ghost"}`}
+								onClick={() => {
+									setSidebarMode("hosting");
+									setActiveMapPicker("ride");
+								}}
+							>
+								Hosting
+							</button>
+						</div>
+						<div className="rides-list">
+							{mappedRides.map(r => (
+								<button
+									key={r.RideID}
+									className={`ride-card ${selectedId === r.RideID ? "selected" : ""}`}
+									onClick={() => {
+										setSelectedId(r.RideID);
+										setBookingForm(prev => ({
+											...prev,
+											pickup_geohash: r.Start_GeoHash || prev.pickup_geohash,
+											drop_geohash: r.End_GeoHash || prev.drop_geohash,
+										}));
+										setBookingLocations(prev => ({
+											...prev,
+											pickup: "Ride start",
+											drop: "Ride end",
+										}));
+									}}
+								>
+									<div className="section-title">
+										<strong>Ride #{r.RideID}</strong>
+										<span className="pill">{r.Vehicle_Type || "—"}</span>
+									</div>
+									<div className="chip-row">
+										<span className="pill success">
+											Seats {r.Available_Seats}/{r.Max_Capacity}
+										</span>
+										<span className="pill">₹{r.Base_Fare_Per_KM} per km</span>
+									</div>
+									<div className="list-inline">
+										<span>{r.Start_GeoHash || "—"}</span>
+										<span>→</span>
+										<span>{r.End_GeoHash || "—"}</span>
+									</div>
+								</button>
+							))}
+						</div>
+					</section>
+
+					{sidebarMode === "booking" && selected ? (
+						<section className="card panel">
+							<div className="section-title">
+								<h3>Book selected ride</h3>
+								<span className="pill success">Ride #{selected.RideID}</span>
+							</div>
+							<form className="form-card compact" onSubmit={handleBookRide}>
+								<div className="chip-row">
+									<button
+										type="button"
+										className="btn ghost"
+										onClick={() => {
+											setActiveMapPicker("booking");
+											setBookingPickTarget(prev => (prev === "pickup" ? "drop" : "pickup"));
+										}}
+									>
+										Select {bookingPickTarget === "pickup" ? "pickup" : "drop"} from map
+									</button>
+								</div>
+								<p className="message">
+									Next map pick: {bookingPickTarget === "pickup" ? "Pickup" : "Drop"}
+								</p>
+								<input
+									placeholder="Pickup location"
+									value={bookingLocations.pickup}
+									onChange={event => {
+										setBookingLocations({
+											...bookingLocations,
+											pickup: event.target.value,
+										});
+										setBookingForm(prev => ({ ...prev, pickup_geohash: "" }));
+									}}
+									required
+								/>
+								{bookingPickupSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{bookingPickupSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{bookingPickupSuggestions.map(suggestion => (
+											<li key={`pickup-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() =>
+														applySuggestionToBooking("pickup", suggestion)
+													}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Pickup geohash: {bookingForm.pickup_geohash || "-"}
+								</p>
+								<input
+									placeholder="Drop location"
+									value={bookingLocations.drop}
+									onChange={event => {
+										setBookingLocations({
+											...bookingLocations,
+											drop: event.target.value,
+										});
+										setBookingForm(prev => ({ ...prev, drop_geohash: "" }));
+									}}
+									required
+								/>
+								{bookingDropSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{bookingDropSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{bookingDropSuggestions.map(suggestion => (
+											<li key={`drop-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToBooking("drop", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Drop geohash: {bookingForm.drop_geohash || "-"}
+								</p>
+								<p className="message">
+									{bookingDistanceLoading
+										? "Calculating route distance..."
+										: bookingRouteDistanceKm
+											? `Route distance (OSRM): ${bookingRouteDistanceKm} km`
+											: "Route distance (OSRM): -"}
+								</p>
+								<button className="btn primary" type="submit">
+									Confirm Booking
+								</button>
+							</form>
+						</section>
+					) : null}
+
+					{sidebarMode === "hosting" ? (
+						<section className="card panel">
+							<div className="section-title">
+								<h3>Host a ride</h3>
+								<span className="pill">New</span>
+							</div>
+							<form className="form-card compact" onSubmit={handleCreateRide}>
+								<div className="chip-row">
+									<button
+										type="button"
+										className={`btn ${ridePickTarget === "start" ? "primary" : "ghost"}`}
+										onClick={() => {
+											setActiveMapPicker("ride");
+											setRidePickTarget("start");
+										}}
+									>
+										Pick Start From Map
+									</button>
+									<button
+										type="button"
+										className={`btn ${ridePickTarget === "end" ? "primary" : "ghost"}`}
+										onClick={() => {
+											setActiveMapPicker("ride");
+											setRidePickTarget("end");
+										}}
+									>
+										Pick End From Map
+									</button>
+								</div>
+								<input
+									placeholder="Start location"
+									value={rideLocations.start}
+									onChange={event => {
+										setRideLocations({
+											...rideLocations,
+											start: event.target.value,
+										});
+										setRideForm(prev => ({ ...prev, start_geohash: "" }));
+									}}
+									required
+								/>
+								{rideStartSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{rideStartSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{rideStartSuggestions.map(suggestion => (
+											<li key={`start-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToRide("start", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Start geohash: {rideForm.start_geohash || "-"}
+								</p>
+								<input
+									placeholder="End location"
+									value={rideLocations.end}
+									onChange={event => {
+										setRideLocations({
+											...rideLocations,
+											end: event.target.value,
+										});
+										setRideForm(prev => ({ ...prev, end_geohash: "" }));
+									}}
+									required
+								/>
+								{rideEndSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{rideEndSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{rideEndSuggestions.map(suggestion => (
+											<li key={`end-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToRide("end", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									End geohash: {rideForm.end_geohash || "-"}
+								</p>
+								<input
+									type="datetime-local"
+									value={rideForm.departure_time}
+									onChange={event =>
+										setRideForm({
+											...rideForm,
+											departure_time: event.target.value,
+										})
+									}
+									required
+								/>
+								<input
+									placeholder="Vehicle type"
+									value={rideForm.vehicle_type}
+									onChange={event =>
+										setRideForm({
+											...rideForm,
+											vehicle_type: event.target.value,
+										})
+									}
+									required
+								/>
+								<input
+									type="number"
+									min="1"
+									max="10"
+									placeholder="Max capacity"
+									value={rideForm.max_capacity}
+									onChange={event =>
+										setRideForm({
+											...rideForm,
+											max_capacity: event.target.value,
+										})
+									}
+									required
+								/>
+								<input
+									type="number"
+									min="1"
+									step="0.01"
+									placeholder="Fare per km"
+									value={rideForm.base_fare_per_km}
+									onChange={event =>
+										setRideForm({
+											...rideForm,
+											base_fare_per_km: event.target.value,
+										})
+									}
+									required
+								/>
+								<p className="message">
+									{hostingDistanceLoading
+										? "Calculating host route distance..."
+										: hostingRouteDistanceKm
+											? `Host route distance (OSRM): ${hostingRouteDistanceKm} km`
+											: "Host route distance (OSRM): -"}
+								</p>
+								<button className="btn primary" type="submit">
+									Publish Ride
+								</button>
+							</form>
+						</section>
+					) : null}
+				</div>
+
+				<div className="map-shell card panel map-stage">
+					<div className="map-head">
+						<h2>Map</h2>
+						<p>Click a ride to focus the map.</p>
+					</div>
+
+					<MapContainer
+						center={
+							selected && Array.isArray(selected.start)
+								? selected.start
+								: [23.2156, 72.6369]
+						}
+						zoom={12}
+						style={{ height: 520 }}
+					>
+						<TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+						<Focus ride={selected} />
+						<MapClickCapture onPick={handleMapPick} />
+						{mappedRides.map(r => {
+							const hasCoords = Array.isArray(r.start) && Array.isArray(r.end);
+							return (
+								<React.Fragment key={`m-${r.RideID}`}>
+									{hasCoords ? (
+										<Polyline
+											positions={[r.start, r.end]}
+											pathOptions={{
+												color:
+													selectedId === r.RideID ? "#ebbe0b" : "#8cbcff",
+												weight: selectedId === r.RideID ? 4 : 2,
+												dashArray:
+													selectedId === r.RideID ? undefined : "8 10",
+												opacity: selectedId === r.RideID ? 0.95 : 0.55,
+											}}
+										/>
+									) : null}
+									{hasCoords ? (
+										<Marker
+											position={r.start}
+											icon={
+												selectedId === r.RideID
+													? selectedStartIcon
+													: smallStartIcon
+											}
+										>
+											<Popup>Start (Ride #{r.RideID})</Popup>
+										</Marker>
+									) : null}
+									{hasCoords ? (
+										<Marker
+											position={r.end}
+											icon={selectedId === r.RideID ? endIcon : smallEndIcon}
+										>
+											<Popup>End (Ride #{r.RideID})</Popup>
+										</Marker>
+									) : null}
+								</React.Fragment>
+							);
+						})}
+						{bookingPickupPoint ? (
+							<Marker position={bookingPickupPoint} icon={bookingPickupIcon}>
+								<Popup>
+									Booking pickup ({bookingLocations.pickup || bookingForm.pickup_geohash})
+								</Popup>
+							</Marker>
+						) : null}
+						{bookingDropPoint ? (
+							<Marker position={bookingDropPoint} icon={bookingDropIcon}>
+								<Popup>
+									Booking drop ({bookingLocations.drop || bookingForm.drop_geohash})
+								</Popup>
+							</Marker>
+						) : null}
+						{bookingRoutePath.length > 0 ? (
 							<Polyline
-								positions={[ride.start, ride.end]}
+								positions={bookingRoutePath}
 								pathOptions={{
-									color: ride.RideID === selectedRideId ? "#1f7aff" : "#7f9fd6",
-									dashArray: "8 8",
-									weight: ride.RideID === selectedRideId ? 4 : 2,
+									color: "#7b4dff",
+									weight: 4,
+									opacity: 0.9,
 								}}
 							/>
-						</React.Fragment>
-					))}
-
-					{selectedRide ? (
-						<>
-							<Marker position={selectedRide.start} icon={selectedStartIcon}>
-								<Popup>Ride #{selectedRide.RideID} start</Popup>
-							</Marker>
-							<Marker position={selectedRide.end} icon={endIcon}>
-								<Popup>Ride #{selectedRide.RideID} destination</Popup>
-							</Marker>
-						</>
-					) : null}
-
-					{draftStart ? (
-						<Marker position={draftStart} icon={selectedStartIcon}>
-							<Popup>Create ride start ({rideForm.start_geohash})</Popup>
-						</Marker>
-					) : null}
-					{draftEnd ? (
-						<Marker position={draftEnd} icon={endIcon}>
-							<Popup>Create ride end ({rideForm.end_geohash})</Popup>
-						</Marker>
-					) : null}
-					{draftStart && draftEnd ? (
-						<Polyline
-							positions={[draftStart, draftEnd]}
-							pathOptions={{ color: "#34a853", weight: 3 }}
-						/>
-					) : null}
-					{draftPickup ? (
-						<Marker position={draftPickup} icon={startIcon}>
-							<Popup>Booking pickup ({bookingForm.pickup_geohash})</Popup>
-						</Marker>
-					) : null}
-					{draftDrop ? (
-						<Marker position={draftDrop} icon={endIcon}>
-							<Popup>Booking drop ({bookingForm.drop_geohash})</Popup>
-						</Marker>
-					) : null}
-					{draftPickup && draftDrop ? (
-						<Polyline
-							positions={[draftPickup, draftDrop]}
-							pathOptions={{ color: "#7b4dff", dashArray: "6 6", weight: 3 }}
-						/>
-					) : null}
-
-					{selectedRideRoute.length > 0 ? (
-						<Polyline
-							positions={selectedRideRoute}
-							pathOptions={{ color: "#ff7a4f", weight: 4 }}
-						/>
-					) : null}
-				</MapContainer>
-			</section>
-
-			<div className="grid-two">
-				<section className="card">
-					<h2>Available rides</h2>
-					<div className="rides-list">
-						{mappedRides.map(ride => (
-							<button
-								key={ride.RideID}
-								className={`ride-card ${selectedRideId === ride.RideID ? "selected" : ""}`}
-								onClick={() => setSelectedRideId(ride.RideID)}
-							>
-								<strong>Ride #{ride.RideID}</strong>
-								<span>
-									{ride.Start_GeoHash}
-									{" -> "}
-									{ride.End_GeoHash}
-								</span>
-								<span>
-									{ride.Vehicle_Type} | Seats: {ride.Available_Seats}/
-									{ride.Max_Capacity}
-								</span>
-								<span>Fare/km: {ride.Base_Fare_Per_KM}</span>
-								<a
-									href={toGoogleDirectionsUrl(ride.start, ride.end)}
-									target="_blank"
-									rel="noreferrer"
-									onClick={event => event.stopPropagation()}
-								>
-									Open Route In Google Maps
-								</a>
-							</button>
-						))}
-					</div>
-				</section>
-
-				<section className="card">
-					<h2>Create ride</h2>
-					<form className="form-card compact" onSubmit={handleCreateRide}>
-						<div className="pick-mode">
-							<button
-								type="button"
-								className={`btn ${ridePickTarget === "start" ? "primary" : "ghost"}`}
-								onClick={() => {
-									setActiveMapPicker("ride");
-									setRidePickTarget("start");
+						) : bookingPickupPoint && bookingDropPoint ? (
+							<Polyline
+								positions={[bookingPickupPoint, bookingDropPoint]}
+								pathOptions={{
+									color: "#7b4dff",
+									dashArray: "6 6",
+									weight: 3,
+									opacity: 0.85,
 								}}
-							>
-								Pick Start From Map
-							</button>
-							<button
-								type="button"
-								className={`btn ${ridePickTarget === "end" ? "primary" : "ghost"}`}
-								onClick={() => {
-									setActiveMapPicker("ride");
-									setRidePickTarget("end");
+							/>
+						) : null}
+						{draftStart ? (
+							<Marker position={draftStart} icon={selectedStartIcon}>
+								<Popup>
+									Host ride start ({rideLocations.start || rideForm.start_geohash})
+								</Popup>
+							</Marker>
+						) : null}
+						{draftEnd ? (
+							<Marker position={draftEnd} icon={endIcon}>
+								<Popup>
+									Host ride end ({rideLocations.end || rideForm.end_geohash})
+								</Popup>
+							</Marker>
+						) : null}
+						{hostingRoute.length > 0 ? (
+							<Polyline
+								positions={hostingRoute}
+								pathOptions={{ color: "#34a853", weight: 4, opacity: 0.95 }}
+							/>
+						) : draftStart && draftEnd ? (
+							<Polyline
+								positions={[draftStart, draftEnd]}
+								pathOptions={{
+									color: "#34a853",
+									weight: 3,
+									opacity: 0.4,
+									dashArray: "6 6",
 								}}
-							>
-								Pick End From Map
-							</button>
-						</div>
-						<input
-							placeholder="Start geohash"
-							value={rideForm.start_geohash}
-							onChange={e =>
-								setRideForm({ ...rideForm, start_geohash: e.target.value })
-							}
-							required
-						/>
-						<input
-							placeholder="End geohash"
-							value={rideForm.end_geohash}
-							onChange={e =>
-								setRideForm({ ...rideForm, end_geohash: e.target.value })
-							}
-							required
-						/>
-						<input
-							type="datetime-local"
-							value={rideForm.departure_time}
-							onChange={e =>
-								setRideForm({ ...rideForm, departure_time: e.target.value })
-							}
-							required
-						/>
-						<input
-							placeholder="Vehicle type"
-							value={rideForm.vehicle_type}
-							onChange={e =>
-								setRideForm({ ...rideForm, vehicle_type: e.target.value })
-							}
-							required
-						/>
-						<input
-							type="number"
-							min="1"
-							max="10"
-							placeholder="Max capacity"
-							value={rideForm.max_capacity}
-							onChange={e =>
-								setRideForm({ ...rideForm, max_capacity: e.target.value })
-							}
-							required
-						/>
-						<input
-							type="number"
-							min="1"
-							step="0.01"
-							placeholder="Fare per km"
-							value={rideForm.base_fare_per_km}
-							onChange={e =>
-								setRideForm({ ...rideForm, base_fare_per_km: e.target.value })
-							}
-							required
-						/>
-						<button className="btn primary" type="submit">
-							Publish Ride
-						</button>
-					</form>
-				</section>
+							/>
+						) : null}
+						{selectedRoute.length > 0 ? (
+							<Polyline
+								positions={selectedRoute}
+								pathOptions={{ color: "#0beb87", weight: 5, opacity: 0.9 }}
+							/>
+						) : null}
+					</MapContainer>
+				</div>
 			</div>
 
-			<div className="grid-two">
-				<section className="card">
-					<h2>Book selected ride</h2>
-					<form className="form-card compact" onSubmit={handleBookRide}>
-						<div className="pick-mode">
+			{locationPickerOpen ? (
+				<div
+					style={{
+						position: "fixed",
+						inset: 0,
+						background: "rgba(0, 0, 0, 0.55)",
+						display: "grid",
+						placeItems: "center",
+						zIndex: 1000,
+					}}
+				>
+					<section
+						className="card"
+						style={{
+							width: "min(780px, 94vw)",
+							maxHeight: "80vh",
+							overflow: "auto",
+							background: "rgba(0, 0, 0, 0.95)",
+						}}
+					>
+						<div className="section-title" style={{ marginBottom: 10 }}>
+							<h3>
+								Pick {locationPickTarget === "pickup" ? "Pickup" : "Drop"} From
+								Locations
+							</h3>
 							<button
+								className="btn ghost"
 								type="button"
-								className={`btn ${bookingPickTarget === "pickup" && activeMapPicker === "booking" ? "primary" : "ghost"}`}
-								onClick={() => {
-									setActiveMapPicker("booking");
-									setBookingPickTarget("pickup");
-								}}
+								onClick={() => setLocationPickerOpen(false)}
 							>
-								Pick Pickup From Map
-							</button>
-							<button
-								type="button"
-								className={`btn ${bookingPickTarget === "drop" && activeMapPicker === "booking" ? "primary" : "ghost"}`}
-								onClick={() => {
-									setActiveMapPicker("booking");
-									setBookingPickTarget("drop");
-								}}
-							>
-								Pick Drop From Map
+								Close
 							</button>
 						</div>
-						<input
-							placeholder="Pickup geohash"
-							value={bookingForm.pickup_geohash}
-							onChange={e =>
-								setBookingForm({ ...bookingForm, pickup_geohash: e.target.value })
-							}
-							required
-						/>
-						<input
-							placeholder="Drop geohash"
-							value={bookingForm.drop_geohash}
-							onChange={e =>
-								setBookingForm({ ...bookingForm, drop_geohash: e.target.value })
-							}
-							required
-						/>
-						<input
-							type="number"
-							min="0.1"
-							step="0.1"
-							placeholder="Distance km"
-							value={bookingForm.distance_travelled_km}
-							onChange={e =>
-								setBookingForm({
-									...bookingForm,
-									distance_travelled_km: e.target.value,
-								})
-							}
-							required
-						/>
-						<button className="btn primary" type="submit">
-							Book Ride #{selectedRideId ?? "?"}
-						</button>
-					</form>
-				</section>
-
-				<section className="card">
-					<h2>My bookings</h2>
-					<ul className="booking-list">
-						{myBookings.map(booking => (
-							<li key={booking.BookingID}>
-								<strong>Booking #{booking.BookingID}</strong>
-								<span>
-									Ride #{booking.RideID} | {booking.Booking_Status}
-								</span>
-								<span>
-									{booking.Pickup_GeoHash}
-									{" -> "}
-									{booking.Drop_GeoHash}
-								</span>
-							</li>
-						))}
-					</ul>
-				</section>
-			</div>
-
-			<section className="card">
-				<h2>Ride Chat {selectedRideId ? `(Ride #${selectedRideId})` : ""}</h2>
-				<form className="form-card compact" onSubmit={handleSendChat}>
-					<input
-						placeholder="Type a message"
-						value={chatDraft}
-						onChange={event => setChatDraft(event.target.value)}
-					/>
-					<button className="btn primary" type="submit">
-						Send Message
-					</button>
-				</form>
-				<ul className="booking-list">
-					{chatMessages.map(messageItem => (
-						<li key={messageItem.MessageID}>
-							<strong>Member #{messageItem.Sender_MemberID}</strong>
-							<span>{messageItem.Message_Body}</span>
-							<span>{new Date(messageItem.Sent_At).toLocaleString()}</span>
-						</li>
-					))}
-				</ul>
-			</section>
+						<form
+							className="form-card compact"
+							onSubmit={event => {
+								event.preventDefault();
+								loadLocationOptions();
+							}}
+						>
+							<input
+								placeholder="Search by name"
+								value={locationSearch}
+								onChange={event => setLocationSearch(event.target.value)}
+							/>
+							<input
+								placeholder="Location type (Campus, City, Transport...)"
+								value={locationTypeFilter}
+								onChange={event => setLocationTypeFilter(event.target.value)}
+							/>
+							<button type="submit" className="btn primary">
+								Search
+							</button>
+						</form>
+						<ul className="booking-list" style={{ marginTop: 10 }}>
+							{locationLoading ? <li>Loading locations...</li> : null}
+							{!locationLoading && locationOptions.length === 0 ? (
+								<li>No locations found.</li>
+							) : null}
+							{locationOptions.map(location => (
+								<li key={location.LocationID}>
+									<strong>{location.Location_Name}</strong>
+									<span>Type: {location.Location_Type}</span>
+									<span>GeoHash: {location.GeoHash || "-"}</span>
+									<button
+										type="button"
+										className="btn primary"
+										onClick={() => applyLocationGeohash(location)}
+										disabled={!location.GeoHash}
+									>
+										Use This Location
+									</button>
+								</li>
+							))}
+						</ul>
+					</section>
+				</div>
+			) : null}
 
 			<p className="message">{message}</p>
 		</div>
