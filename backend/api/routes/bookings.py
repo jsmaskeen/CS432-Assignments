@@ -147,6 +147,23 @@ def delete_booking(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
 
     ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+    if ride is not None and ride.Host_MemberID == booking.Passenger_MemberID:
+        if ride.Ride_Status in {"Started", "Completed"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete a ride that has started or completed",
+            )
+        db.delete(ride)
+        db.commit()
+        audit_event(
+            action="rides.delete",
+            status="success",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"ride_id": ride.RideID, "trigger": "host_booking_delete"},
+        )
+        return {"message": "Ride deleted"}
+
     participant = db.scalar(
         select(RideParticipant).where(
             RideParticipant.RideID == booking.RideID,
