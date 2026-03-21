@@ -13,14 +13,18 @@ from core.config import settings
 from db.session import get_db_session
 from models.auth_credential import AuthCredential
 from models.booking import Booking
+from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
 from schemas.admin import (
     AdminMemberReadResponse,
     AdminMemberRoleUpdateRequest,
+    AdminRideParticipantResponse,
+    AdminRideReadResponse,
     AdminRideStatsResponse,
     AuditLogReadResponse,
 )
+from schemas.chat import ChatReadResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger("rajak.admin")
@@ -187,6 +191,163 @@ def read_audit_logs(
         details={"limit": limit, "returned": len(parsed)},
     )
     return parsed
+
+
+@router.get("/rides/active", response_model=list[AdminRideReadResponse])
+def list_active_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Started").order_by(Ride.Departure_Time.asc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/open", response_model=list[AdminRideReadResponse])
+def list_open_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Open").order_by(Ride.Departure_Time.asc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/completed", response_model=list[AdminRideReadResponse])
+def list_completed_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Completed").order_by(Ride.Departure_Time.desc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/{ride_id}/participants", response_model=list[AdminRideParticipantResponse])
+def list_ride_participants(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideParticipantResponse]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    participants: list[AdminRideParticipantResponse] = []
+    host = db.scalar(select(Member).where(Member.MemberID == ride.Host_MemberID))
+    if host is not None:
+        participants.append(
+            AdminRideParticipantResponse(
+                member_id=host.MemberID,
+                full_name=host.Full_Name,
+                email=host.Email,
+                phone_number=host.Phone_Number,
+                gender=host.Gender,
+                is_host=True,
+                booking_id=None,
+                booking_status=None,
+            )
+        )
+
+    stmt = (
+        select(Booking, Member)
+        .join(Member, Member.MemberID == Booking.Passenger_MemberID)
+        .where(
+            Booking.RideID == ride_id,
+            Booking.Booking_Status == "Confirmed",
+            Booking.Passenger_MemberID != ride.Host_MemberID,
+        )
+        .order_by(Booking.Booked_At.asc())
+    )
+    for booking, member in db.execute(stmt).all():
+        participants.append(
+            AdminRideParticipantResponse(
+                member_id=member.MemberID,
+                full_name=member.Full_Name,
+                email=member.Email,
+                phone_number=member.Phone_Number,
+                gender=member.Gender,
+                is_host=False,
+                booking_id=booking.BookingID,
+                booking_status=booking.Booking_Status,
+            )
+        )
+
+    audit_event(
+        action="admin.ride.participants",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id, "participants": len(participants)},
+    )
+    return participants
+
+
+@router.get("/rides/{ride_id}/chats", response_model=list[ChatReadResponse])
+def list_ride_chats(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[RideChatMessage]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    stmt = select(RideChatMessage).where(RideChatMessage.RideID == ride_id).order_by(RideChatMessage.Sent_At.asc())
+    messages = list(db.scalars(stmt))
+    audit_event(
+        action="admin.ride.chats",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id, "messages": len(messages)},
+    )
+    return messages
 
 
 @router.get("/tables")
