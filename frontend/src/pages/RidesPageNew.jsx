@@ -79,6 +79,51 @@ function decodeGeohash(geo) {
 	}
 }
 
+async function fetchNominatimSuggestions(query, userLocation) {
+	if (!query) {
+		return [];
+	}
+	const params = new URLSearchParams({
+		format: "json",
+		limit: "5",
+		q: query,
+	});
+	if (userLocation?.lat && userLocation?.lng) {
+		const delta = 0.02;
+		const left = userLocation.lng - delta;
+		const right = userLocation.lng + delta;
+		const top = userLocation.lat + delta;
+		const bottom = userLocation.lat - delta;
+		params.set("viewbox", `${left},${top},${right},${bottom}`);
+		params.set("bounded", "0");
+	}
+	const url = `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+	const response = await fetch(url, {
+		headers: {
+			"Accept-Language": "en",
+		},
+	});
+	if (!response.ok) {
+		return [];
+	}
+	const data = await response.json();
+	return (data || [])
+		.map(item => {
+			const lat = Number(item?.lat);
+			const lng = Number(item?.lon);
+			if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+				return null;
+			}
+			return {
+				id: `nom-${item.place_id}`,
+				label: item.display_name || query,
+				geohash: geohash.encode(lat, lng, 7),
+				source: "Nearby match",
+			};
+		})
+		.filter(Boolean);
+}
+
 async function fetchRouteData(startPoint, endPoint) {
 	const [sLat, sLng] = startPoint;
 	const [eLat, eLng] = endPoint;
@@ -108,28 +153,190 @@ export default function RidesPageNew() {
 	const [selectedRoute, setSelectedRoute] = useState([]);
 	const [sidebarMode, setSidebarMode] = useState("booking");
 	const [rideForm, setRideForm] = useState(initialRide);
+	const [rideLocations, setRideLocations] = useState({ start: "", end: "" });
+	const [rideStartSuggestions, setRideStartSuggestions] = useState([]);
+	const [rideEndSuggestions, setRideEndSuggestions] = useState([]);
 	const [ridePickTarget, setRidePickTarget] = useState("start");
 	const [hostingRoute, setHostingRoute] = useState([]);
 	const [hostingRouteDistanceKm, setHostingRouteDistanceKm] = useState(null);
 	const [hostingDistanceLoading, setHostingDistanceLoading] = useState(false);
 	const [bookingForm, setBookingForm] = useState(initialBooking);
+	const [bookingLocations, setBookingLocations] = useState({ pickup: "", drop: "" });
+	const [bookingPickupSuggestions, setBookingPickupSuggestions] = useState([]);
+	const [bookingDropSuggestions, setBookingDropSuggestions] = useState([]);
 	const [bookingRouteDistanceKm, setBookingRouteDistanceKm] = useState(null);
 	const [bookingDistanceLoading, setBookingDistanceLoading] = useState(false);
 	const [bookingPickTarget, setBookingPickTarget] = useState("pickup");
+	const [rideStartSearchLoading, setRideStartSearchLoading] = useState(false);
+	const [rideEndSearchLoading, setRideEndSearchLoading] = useState(false);
+	const [bookingPickupSearchLoading, setBookingPickupSearchLoading] = useState(false);
+	const [bookingDropSearchLoading, setBookingDropSearchLoading] = useState(false);
 	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 	const [locationPickTarget, setLocationPickTarget] = useState("pickup");
 	const [locationSearch, setLocationSearch] = useState("");
 	const [locationTypeFilter, setLocationTypeFilter] = useState("");
 	const [locationOptions, setLocationOptions] = useState([]);
 	const [locationLoading, setLocationLoading] = useState(false);
+	const [locationsCatalog, setLocationsCatalog] = useState([]);
 	const [activeMapPicker, setActiveMapPicker] = useState("booking");
 	const [message, setMessage] = useState("");
+	const [userLocation, setUserLocation] = useState(null);
 
 	useEffect(() => {
 		api.listRides()
 			.then(r => setRides(r || []))
 			.catch(() => setMessage("Failed to load rides"));
 	}, []);
+
+	useEffect(() => {
+		if (!navigator.geolocation) {
+			return;
+		}
+		navigator.geolocation.getCurrentPosition(
+			position => {
+				setUserLocation({
+					lat: position.coords.latitude,
+					lng: position.coords.longitude,
+				});
+			},
+			() => {
+				// Ignore location errors; suggestions will still work without bias.
+			},
+			{ enableHighAccuracy: false, timeout: 8000 },
+		);
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		async function loadLocationsCatalog() {
+			try {
+				const data = await api.listLocations({ limit: 200 });
+				if (!cancelled) {
+					setLocationsCatalog(data || []);
+				}
+			} catch {
+				if (!cancelled) {
+					setLocationsCatalog([]);
+				}
+			}
+		}
+
+		loadLocationsCatalog();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	async function buildLocationSuggestions(query) {
+		const trimmed = query.trim();
+		if (!trimmed) {
+			return [];
+		}
+		const lower = trimmed.toLowerCase();
+		const savedMatches = (locationsCatalog || [])
+			.filter(location => location.Location_Name?.toLowerCase().includes(lower))
+			.slice(0, 5)
+			.map(location => ({
+				id: `saved-${location.LocationID}`,
+				label: location.Location_Name,
+				geohash: location.GeoHash,
+				source: "Saved location",
+			}));
+		const nominatimMatches = await fetchNominatimSuggestions(trimmed, userLocation);
+		const combined = [...savedMatches, ...nominatimMatches];
+		const seen = new Set();
+		return combined.filter(item => {
+			if (!item?.geohash || seen.has(item.geohash)) {
+				return false;
+			}
+			seen.add(item.geohash);
+			return true;
+		});
+	}
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!rideLocations.start.trim()) {
+			setRideStartSuggestions([]);
+			setRideStartSearchLoading(false);
+			return () => {};
+		}
+		setRideStartSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(rideLocations.start);
+			if (!cancelled) {
+				setRideStartSuggestions(suggestions);
+				setRideStartSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [rideLocations.start, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!rideLocations.end.trim()) {
+			setRideEndSuggestions([]);
+			setRideEndSearchLoading(false);
+			return () => {};
+		}
+		setRideEndSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(rideLocations.end);
+			if (!cancelled) {
+				setRideEndSuggestions(suggestions);
+				setRideEndSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [rideLocations.end, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!bookingLocations.pickup.trim()) {
+			setBookingPickupSuggestions([]);
+			setBookingPickupSearchLoading(false);
+			return () => {};
+		}
+		setBookingPickupSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(bookingLocations.pickup);
+			if (!cancelled) {
+				setBookingPickupSuggestions(suggestions);
+				setBookingPickupSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [bookingLocations.pickup, locationsCatalog, userLocation]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!bookingLocations.drop.trim()) {
+			setBookingDropSuggestions([]);
+			setBookingDropSearchLoading(false);
+			return () => {};
+		}
+		setBookingDropSearchLoading(true);
+		const timer = setTimeout(async () => {
+			const suggestions = await buildLocationSuggestions(bookingLocations.drop);
+			if (!cancelled) {
+				setBookingDropSuggestions(suggestions);
+				setBookingDropSearchLoading(false);
+			}
+		}, 300);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [bookingLocations.drop, locationsCatalog, userLocation]);
 
 	const mappedRides = rides
 		.map(r => {
@@ -282,12 +489,17 @@ export default function RidesPageNew() {
 			setMessage("Select a ride first");
 			return;
 		}
+		if (!bookingForm.pickup_geohash || !bookingForm.drop_geohash) {
+			setMessage("Select pickup and drop from the suggestions or map first.");
+			return;
+		}
 		try {
 			await api.bookRide(selectedId, {
 				...bookingForm,
 			});
 			setMessage(`Ride #${selectedId} booked successfully`);
 			setBookingForm(initialBooking);
+			setBookingLocations({ pickup: "", drop: "" });
 			const refreshed = await api.listRides();
 			setRides(refreshed || []);
 		} catch (error) {
@@ -297,6 +509,10 @@ export default function RidesPageNew() {
 
 	async function handleCreateRide(event) {
 		event.preventDefault();
+		if (!rideForm.start_geohash || !rideForm.end_geohash) {
+			setMessage("Select start and end from the suggestions or map first.");
+			return;
+		}
 		if (hostingRouteDistanceKm === null || hostingDistanceLoading) {
 			setMessage(
 				"Waiting for host route details from map API. Please try again in a moment.",
@@ -311,6 +527,7 @@ export default function RidesPageNew() {
 				max_capacity: Number(rideForm.max_capacity),
 			});
 			setRideForm(initialRide);
+			setRideLocations({ start: "", end: "" });
 			setHostingRoute([]);
 			setHostingRouteDistanceKm(null);
 			setSidebarMode("booking");
@@ -324,6 +541,7 @@ export default function RidesPageNew() {
 
 	function handleMapPick(latlng) {
 		const hash = geohash.encode(latlng.lat, latlng.lng, 7);
+		const label = `Map selection (${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)})`;
 
 		if (activeMapPicker === "ride") {
 			if (!ridePickTarget) {
@@ -331,12 +549,14 @@ export default function RidesPageNew() {
 			}
 			if (ridePickTarget === "start") {
 				setRideForm(prev => ({ ...prev, start_geohash: hash }));
+				setRideLocations(prev => ({ ...prev, start: label }));
 				setRidePickTarget("end");
 				setMessage(`Picked ride start geohash: ${hash}`);
 				return;
 			}
 
 			setRideForm(prev => ({ ...prev, end_geohash: hash }));
+			setRideLocations(prev => ({ ...prev, end: label }));
 			setMessage(`Picked ride end geohash: ${hash}`);
 			return;
 		}
@@ -347,13 +567,51 @@ export default function RidesPageNew() {
 
 		if (bookingPickTarget === "pickup") {
 			setBookingForm(prev => ({ ...prev, pickup_geohash: hash }));
+			setBookingLocations(prev => ({ ...prev, pickup: label }));
 			setBookingPickTarget("drop");
 			setMessage(`Picked pickup geohash: ${hash}`);
 			return;
 		}
 
 		setBookingForm(prev => ({ ...prev, drop_geohash: hash }));
+		setBookingLocations(prev => ({ ...prev, drop: label }));
 		setMessage(`Picked drop geohash: ${hash}`);
+	}
+
+	function applySuggestionToBooking(target, suggestion) {
+		if (!suggestion?.geohash) {
+			setMessage("Selected suggestion has no geohash.");
+			return;
+		}
+		if (target === "pickup") {
+			setBookingForm(prev => ({ ...prev, pickup_geohash: suggestion.geohash }));
+			setBookingLocations(prev => ({ ...prev, pickup: suggestion.label }));
+			setBookingPickupSuggestions([]);
+			setMessage(`Pickup set: ${suggestion.label}`);
+			return;
+		}
+		setBookingForm(prev => ({ ...prev, drop_geohash: suggestion.geohash }));
+		setBookingLocations(prev => ({ ...prev, drop: suggestion.label }));
+		setBookingDropSuggestions([]);
+		setMessage(`Drop set: ${suggestion.label}`);
+	}
+
+	function applySuggestionToRide(target, suggestion) {
+		if (!suggestion?.geohash) {
+			setMessage("Selected suggestion has no geohash.");
+			return;
+		}
+		if (target === "start") {
+			setRideForm(prev => ({ ...prev, start_geohash: suggestion.geohash }));
+			setRideLocations(prev => ({ ...prev, start: suggestion.label }));
+			setRideStartSuggestions([]);
+			setMessage(`Start set: ${suggestion.label}`);
+			return;
+		}
+		setRideForm(prev => ({ ...prev, end_geohash: suggestion.geohash }));
+		setRideLocations(prev => ({ ...prev, end: suggestion.label }));
+		setRideEndSuggestions([]);
+		setMessage(`End set: ${suggestion.label}`);
 	}
 
 	async function loadLocationOptions(
@@ -387,14 +645,17 @@ export default function RidesPageNew() {
 
 		if (locationPickTarget === "pickup") {
 			setBookingForm(prev => ({ ...prev, pickup_geohash: location.GeoHash }));
+			setBookingLocations(prev => ({ ...prev, pickup: location.Location_Name || "" }));
 			setMessage(`Pickup set from location: ${location.Location_Name}`);
 		} else {
 			setBookingForm(prev => ({ ...prev, drop_geohash: location.GeoHash }));
+			setBookingLocations(prev => ({ ...prev, drop: location.Location_Name || "" }));
 			setMessage(`Drop set from location: ${location.Location_Name}`);
 		}
 
 		setLocationPickerOpen(false);
 	}
+
 
 	return (
 		<div className="page rides-page">
@@ -455,6 +716,11 @@ export default function RidesPageNew() {
 											...prev,
 											pickup_geohash: r.Start_GeoHash || prev.pickup_geohash,
 											drop_geohash: r.End_GeoHash || prev.drop_geohash,
+										}));
+										setBookingLocations(prev => ({
+											...prev,
+											pickup: "Ride start",
+											drop: "Ride end",
 										}));
 									}}
 								>
@@ -522,27 +788,75 @@ export default function RidesPageNew() {
 									</button>
 								</div>
 								<input
-									placeholder="Pickup geohash"
-									value={bookingForm.pickup_geohash}
-									onChange={event =>
-										setBookingForm({
-											...bookingForm,
-											pickup_geohash: event.target.value,
-										})
-									}
+									placeholder="Pickup location"
+									value={bookingLocations.pickup}
+									onChange={event => {
+										setBookingLocations({
+											...bookingLocations,
+											pickup: event.target.value,
+										});
+										setBookingForm(prev => ({ ...prev, pickup_geohash: "" }));
+									}}
 									required
 								/>
+								{bookingPickupSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{bookingPickupSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{bookingPickupSuggestions.map(suggestion => (
+											<li key={`pickup-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() =>
+														applySuggestionToBooking("pickup", suggestion)
+													}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Pickup geohash: {bookingForm.pickup_geohash || "-"}
+								</p>
 								<input
-									placeholder="Drop geohash"
-									value={bookingForm.drop_geohash}
-									onChange={event =>
-										setBookingForm({
-											...bookingForm,
-											drop_geohash: event.target.value,
-										})
-									}
+									placeholder="Drop location"
+									value={bookingLocations.drop}
+									onChange={event => {
+										setBookingLocations({
+											...bookingLocations,
+											drop: event.target.value,
+										});
+										setBookingForm(prev => ({ ...prev, drop_geohash: "" }));
+									}}
 									required
 								/>
+								{bookingDropSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{bookingDropSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{bookingDropSuggestions.map(suggestion => (
+											<li key={`drop-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToBooking("drop", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Drop geohash: {bookingForm.drop_geohash || "-"}
+								</p>
 								<p className="message">
 									{bookingDistanceLoading
 										? "Calculating route distance..."
@@ -590,27 +904,73 @@ export default function RidesPageNew() {
 									</button>
 								</div>
 								<input
-									placeholder="Start geohash"
-									value={rideForm.start_geohash}
-									onChange={event =>
-										setRideForm({
-											...rideForm,
-											start_geohash: event.target.value,
-										})
-									}
+									placeholder="Start location"
+									value={rideLocations.start}
+									onChange={event => {
+										setRideLocations({
+											...rideLocations,
+											start: event.target.value,
+										});
+										setRideForm(prev => ({ ...prev, start_geohash: "" }));
+									}}
 									required
 								/>
+								{rideStartSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{rideStartSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{rideStartSuggestions.map(suggestion => (
+											<li key={`start-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToRide("start", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									Start geohash: {rideForm.start_geohash || "-"}
+								</p>
 								<input
-									placeholder="End geohash"
-									value={rideForm.end_geohash}
-									onChange={event =>
-										setRideForm({
-											...rideForm,
-											end_geohash: event.target.value,
-										})
-									}
+									placeholder="End location"
+									value={rideLocations.end}
+									onChange={event => {
+										setRideLocations({
+											...rideLocations,
+											end: event.target.value,
+										});
+										setRideForm(prev => ({ ...prev, end_geohash: "" }));
+									}}
 									required
 								/>
+								{rideEndSearchLoading ? (
+									<p className="message">Searching locations...</p>
+								) : null}
+								{rideEndSuggestions.length > 0 ? (
+									<ul className="booking-list">
+										{rideEndSuggestions.map(suggestion => (
+											<li key={`end-${suggestion.id}`}>
+												<button
+													type="button"
+													className="btn ghost"
+													onClick={() => applySuggestionToRide("end", suggestion)}
+												>
+													{suggestion.label}
+												</button>
+												<span className="small">{suggestion.source}</span>
+											</li>
+										))}
+									</ul>
+								) : null}
+								<p className="message">
+									End geohash: {rideForm.end_geohash || "-"}
+								</p>
 								<input
 									type="datetime-local"
 									value={rideForm.departure_time}
@@ -736,12 +1096,16 @@ export default function RidesPageNew() {
 						})}
 						{bookingPickupPoint ? (
 							<Marker position={bookingPickupPoint} icon={startIcon}>
-								<Popup>Booking pickup ({bookingForm.pickup_geohash})</Popup>
+								<Popup>
+									Booking pickup ({bookingLocations.pickup || bookingForm.pickup_geohash})
+								</Popup>
 							</Marker>
 						) : null}
 						{bookingDropPoint ? (
 							<Marker position={bookingDropPoint} icon={endIcon}>
-								<Popup>Booking drop ({bookingForm.drop_geohash})</Popup>
+								<Popup>
+									Booking drop ({bookingLocations.drop || bookingForm.drop_geohash})
+								</Popup>
 							</Marker>
 						) : null}
 						{bookingPickupPoint && bookingDropPoint ? (
@@ -757,12 +1121,16 @@ export default function RidesPageNew() {
 						) : null}
 						{draftStart ? (
 							<Marker position={draftStart} icon={selectedStartIcon}>
-								<Popup>Host ride start ({rideForm.start_geohash})</Popup>
+								<Popup>
+									Host ride start ({rideLocations.start || rideForm.start_geohash})
+								</Popup>
 							</Marker>
 						) : null}
 						{draftEnd ? (
 							<Marker position={draftEnd} icon={endIcon}>
-								<Popup>Host ride end ({rideForm.end_geohash})</Popup>
+								<Popup>
+									Host ride end ({rideLocations.end || rideForm.end_geohash})
+								</Popup>
 							</Marker>
 						) : null}
 						{hostingRoute.length > 0 ? (
