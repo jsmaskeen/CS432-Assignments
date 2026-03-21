@@ -14,7 +14,7 @@ from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
 from models.ride_participant import RideParticipant
-from schemas.ride import BookingCreateRequest, BookingReadResponse
+from schemas.ride import BookingCreateRequest, BookingReadResponse, BookingStopReadResponse
 
 router = APIRouter(prefix="/rides", tags=["bookings"])
 logger = logging.getLogger("rajak.bookings")
@@ -130,6 +130,27 @@ def list_pending_bookings(
             Booking.Booking_Status == "Pending",
         )
         .order_by(Booking.Booked_At.desc())
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/{ride_id}/bookings/confirmed-stops", response_model=list[BookingStopReadResponse])
+def list_confirmed_booking_stops(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> list[Booking]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    stmt = (
+        select(Booking)
+        .where(
+            Booking.RideID == ride_id,
+            Booking.Booking_Status == "Confirmed",
+        )
+        .order_by(Booking.Booked_At.asc())
     )
     return list(db.scalars(stmt))
 

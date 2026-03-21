@@ -22,7 +22,52 @@ export default function ManageRidePage() {
 	const [pendingRouteLoading, setPendingRouteLoading] = useState(false);
 	const [showOldRoute, setShowOldRoute] = useState(true);
 	const [showNewRoute, setShowNewRoute] = useState(true);
+	const [confirmedBookings, setConfirmedBookings] = useState([]);
+	const [confirmedStops, setConfirmedStops] = useState([]);
 	const [message, setMessage] = useState("");
+
+	function distanceKm(a, b) {
+		if (!a || !b) return Number.POSITIVE_INFINITY;
+		const [lat1, lon1] = a;
+		const [lat2, lon2] = b;
+		const rad = Math.PI / 180;
+		const dLat = (lat2 - lat1) * rad;
+		const dLon = (lon2 - lon1) * rad;
+		const lat1Rad = lat1 * rad;
+		const lat2Rad = lat2 * rad;
+		const sinLat = Math.sin(dLat / 2);
+		const sinLon = Math.sin(dLon / 2);
+		const h = sinLat * sinLat + Math.cos(lat1Rad) * Math.cos(lat2Rad) * sinLon * sinLon;
+		return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+	}
+
+	function orderStopsByDistance(start, stops) {
+		if (!start || !Array.isArray(stops) || stops.length === 0) {
+			return stops || [];
+		}
+		const remaining = [...stops];
+		const ordered = [];
+		let current = start;
+		while (remaining.length > 0) {
+			let bestIndex = 0;
+			let bestDistance = distanceKm(current, remaining[0]);
+			for (let i = 1; i < remaining.length; i += 1) {
+				const candidateDistance = distanceKm(current, remaining[i]);
+				if (candidateDistance < bestDistance) {
+					bestDistance = candidateDistance;
+					bestIndex = i;
+				}
+			}
+			const next = remaining.splice(bestIndex, 1)[0];
+			ordered.push(next);
+			current = next;
+		}
+		return ordered;
+	}
+	const orderedConfirmedStops = React.useMemo(() => {
+		const start = decodeGeohash(ride?.Start_GeoHash);
+		return orderStopsByDistance(start, confirmedStops);
+	}, [ride?.Start_GeoHash, confirmedStops]);
 
 	useEffect(() => {
 		async function loadRide() {
@@ -63,6 +108,40 @@ export default function ManageRidePage() {
 		}
 
 		loadPending();
+	}, [rideId]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!rideId) {
+			setConfirmedBookings([]);
+			setConfirmedStops([]);
+			return () => {};
+		}
+
+		api.listConfirmedBookingStops(rideId)
+			.then(data => {
+				if (cancelled) {
+					return;
+				}
+				const bookings = data || [];
+				setConfirmedBookings(bookings);
+				const stops = bookings.flatMap(booking => {
+					const pickup = decodeGeohash(booking.Pickup_GeoHash);
+					const drop = decodeGeohash(booking.Drop_GeoHash);
+					return [pickup, drop].filter(Boolean);
+				});
+				setConfirmedStops(stops);
+			})
+			.catch(() => {
+				if (!cancelled) {
+					setConfirmedBookings([]);
+					setConfirmedStops([]);
+				}
+			});
+
+		return () => {
+			cancelled = true;
+		};
 	}, [rideId]);
 
 	async function handleSubmit(event) {
@@ -129,9 +208,11 @@ export default function ManageRidePage() {
 				setOldRoutePath([]);
 				return;
 			}
+			const combinedStops = [...confirmedStops, pickup, drop];
+			const orderedStops = orderStopsByDistance(rideStart, combinedStops);
 			const [newRoute, oldRoute] = await Promise.all([
-				fetchRouteData([rideStart, pickup, drop, rideEnd]),
-				fetchRouteData([rideStart, rideEnd]),
+				fetchRouteData([rideStart, ...orderedStops, rideEnd]),
+				fetchRouteData([rideStart, ...orderedConfirmedStops, rideEnd]),
 			]);
 			setPendingRoutePath(newRoute.coordinates.map(point => [point[1], point[0]]));
 			setOldRoutePath(oldRoute.coordinates.map(point => [point[1], point[0]]));
@@ -154,6 +235,14 @@ export default function ManageRidePage() {
 			setSelectedPending(null);
 			const data = await api.listPendingBookings(rideId);
 			setPendingRequests(data || []);
+			const confirmed = await api.listConfirmedBookingStops(rideId);
+			setConfirmedBookings(confirmed || []);
+			const stops = (confirmed || []).flatMap(booking => {
+				const pickup = decodeGeohash(booking.Pickup_GeoHash);
+				const drop = decodeGeohash(booking.Drop_GeoHash);
+				return [pickup, drop].filter(Boolean);
+			});
+			setConfirmedStops(stops);
 		} catch (error) {
 			setMessage(error.message || "Booking update failed");
 		}
@@ -226,6 +315,25 @@ export default function ManageRidePage() {
 						Save changes
 					</button>
 				</form>
+			</section>
+			<section className="card panel">
+				<div className="section-title">
+					<h3>Confirmed bookings</h3>
+					<span className="pill">{confirmedBookings.length}</span>
+				</div>
+				<ul className="booking-list">
+					{confirmedBookings.map(booking => (
+						<li key={`confirmed-${booking.BookingID}`}>
+							<strong>Booking #{booking.BookingID}</strong>
+							<span>
+								Pickup {booking.Pickup_GeoHash} → Drop {booking.Drop_GeoHash}
+							</span>
+						</li>
+					))}
+					{confirmedBookings.length === 0 ? (
+						<li>No confirmed bookings yet.</li>
+					) : null}
+				</ul>
 			</section>
 			<section className="card panel">
 				<div className="section-title">

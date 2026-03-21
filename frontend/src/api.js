@@ -58,6 +58,7 @@ export const api = {
 	myBookings: () => request("/rides/my/bookings"),
 	deleteBooking: bookingId => request(`/rides/bookings/${bookingId}`, { method: "DELETE" }),
 	listPendingBookings: rideId => request(`/rides/${rideId}/bookings/pending`),
+	listConfirmedBookingStops: rideId => request(`/rides/${rideId}/bookings/confirmed-stops`),
 	acceptBooking: bookingId => request(`/rides/bookings/${bookingId}/accept`, { method: "POST" }),
 	rejectBooking: bookingId => request(`/rides/bookings/${bookingId}/reject`, { method: "POST" }),
 	listSavedAddresses: () => request("/saved-addresses"),

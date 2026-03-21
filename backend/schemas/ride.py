@@ -61,3 +61,12 @@ class BookingReadResponse(BaseModel):
     Drop_GeoHash: str
     Distance_Travelled_KM: Decimal
     Booked_At: datetime
+
+
+class BookingStopReadResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    BookingID: int
+    Pickup_GeoHash: str
+    Drop_GeoHash: str
+    Booked_At: datetime
