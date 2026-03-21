@@ -6,10 +6,11 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_member
+from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
 from db.session import get_db_session
 from models.booking import Booking
+from models.auth_credential import AuthCredential
 from models.member import Member
 from models.ride import Ride
 from schemas.ride import BookingCreateRequest, BookingReadResponse, RideCreateRequest, RideReadResponse, RideUpdateRequest
@@ -245,3 +246,27 @@ def delete_booking(
         details={"booking_id": booking_id, "ride_id": booking.RideID},
     )
     return {"message": "Booking deleted"}
+
+
+@router.delete("/{ride_id}")
+def delete_ride(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != admin_credential.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host admin can delete this ride")
+
+    db.delete(ride)
+    db.commit()
+    audit_event(
+        action="rides.delete",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id},
+    )
+    return {"message": "Ride deleted"}
