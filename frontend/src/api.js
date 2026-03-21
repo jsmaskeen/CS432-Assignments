@@ -86,5 +86,6 @@ export const api = {
 			method: "PATCH",
 			body: JSON.stringify({ role }),
 		}),
+	getRideStatsAdmin: () => request("/admin/rides/stats"),
 	listAuditLogsAdmin: (limit = 200) => request(`/admin/audit-logs?limit=${limit}`),
 };

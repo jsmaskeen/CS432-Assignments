@@ -104,12 +104,9 @@ CREATE TABLE `Locations` (
 
 LOCK TABLES `Locations` WRITE;
 /*!40000 ALTER TABLE `Locations` DISABLE KEYS */;
-INSERT INTO `Locations` VALUES (1,'IITGN Main Gate','Campus','tdr0z8v'),(2,'Academic Block 1','Campus','tdr0z8w'),(3,'Academic Block 2','Campus','tdr0z8x'),(4,'Library','Campus','tdr0z8y'),(5,'Sports Complex','Campus','tdr0z8z'),(6,'Hostel Area','Campus','tdr0z90'),(7,'Mess 1','Campus','tdr0z91'),(8,'Mess 2','Campus','tdr0z92'),(9,'Student Activity Center','Campus','tdr0z93'),(10,'Medical Center','Campus','tdr0z94'),(11,'Gandhinagar Railway Station','Transport','tdr0x5p'),(12,'Ahmedabad Airport','Transport','tdqzm7n'),(13,'Palaj Bus Stand','Transport','tdr0z2q'),(14,'Indroda Circle','City','tdr1kb5'),(15,'Infocity','City','tdr1k8p'),(16,'Gift City','City','tdr1p2x'),(17,'Sector 21 Gandhinagar','City','tdr1k9y'),(18,'Akshardham Temple','Tourist','tdr1jbw'),(19,'Mahatma Mandir','Event','tdr1kcd'),(20,'City Pulse Mall','Shopping','tdr1k7n'),(21,'Reliance Mall Gandhinagar','Shopping','tdr1k6m'),(22,'Adalaj Stepwell','Tourist','tdr2n5p'),(23,'Sabarmati Riverfront','Tourist','tdqzr8x'),(24,'Law Garden','City','tdqzt2m'),(25,'Paldi','City','tdqzs9n'),(26,'Vastrapur','City','tdqzu7p'),(27,'SG Highway','City','tdqzv5q'),(28,'Thaltej','City','tdqzw3r'),(29,'Navrangpura','City','tdqzx1s'),(30,'CG Road','City','tdqzy0t');
+INSERT INTO `Locations` VALUES (1,'IITGN Main Gate','Campus','ts5sn17'),(2,'Academic Block 1','Campus','ts5sn42'),(3,'Academic Block 2','Campus','ts5sn43'),(4,'Library','Campus','ts5sn44'),(5,'Sports Complex','Campus','ts5sn16'),(6,'Hostel Area','Campus','ts5sn12'),(7,'Jaiswal Mess','Campus','ts5sjcq'),(8,'Gandhinagar Railway Station','Transport','ts5shtv'),(9,'Ahmedabad Airport','Transport','ts5ek89`'),(10,'Infocity','City','ts5euyg'),(11,'Gift City','City','ts5evbx'),(12, 'Kudasan', 'City', 'ts5euu8');
 /*!40000 ALTER TABLE `Locations` ENABLE KEYS */;
 UNLOCK TABLES;
-
---
--- Table structure for table `Members`
 --
 
 DROP TABLE IF EXISTS `Members`;
@@ -306,7 +303,7 @@ CREATE TABLE `Saved_Addresses` (
 
 LOCK TABLES `Saved_Addresses` WRITE;
 /*!40000 ALTER TABLE `Saved_Addresses` DISABLE KEYS */;
-INSERT INTO `Saved_Addresses` VALUES (1,1,'Home',1),(2,1,'Favorite Restaurant',20),(3,2,'Home',6),(4,2,'Airport',12),(5,3,'Home',6),(6,3,'Railway Station',11),(7,4,'Home',6),(8,4,'Mall',21),(9,5,'Home',6),(10,5,'Temple',18),(11,6,'Home',6),(12,6,'Infocity Office',15),(13,7,'Home',6),(14,8,'Home',6),(15,8,'Gift City',16),(16,9,'Home',6),(17,10,'Home',6),(18,10,'CG Road',30),(19,11,'Home',6),(20,12,'Home',6),(21,12,'Adalaj',22),(22,13,'Home',6),(23,14,'Home',6),(24,15,'Home',6),(25,16,'Home',6);
+INSERT INTO `Saved_Addresses` VALUES (1,1,'Hostel Home',6),(2,2,'Main Gate Pickup',1),(3,3,'AB1 Class',2),(4,4,'AB2 Class',3),(5,5,'Library Stop',4),(6,6,'Sports Ground',5),(7,7,'Mess Pickup',7),(8,8,'Railway Station',8),(9,9,'Airport Drop',9),(10,10,'Infocity Office',10),(11,11,'Gift City Office',11),(12,12,'Kudasan Home',12),(13,13,'Main Gate Pickup',1),(14,14,'AB1 Lab',2),(15,15,'AB2 Lab',3),(16,16,'Library Study',4),(17,17,'Sports Practice',5),(18,18,'Hostel Home',6),(19,19,'Mess Pickup',7),(20,20,'Railway Station',8),(21,21,'Airport Drop',9),(22,22,'Infocity Office',10),(23,23,'Gift City Office',11),(24,24,'Kudasan Home',12),(25,25,'Hostel Home',6);
 /*!40000 ALTER TABLE `Saved_Addresses` ENABLE KEYS */;
 UNLOCK TABLES;
 
