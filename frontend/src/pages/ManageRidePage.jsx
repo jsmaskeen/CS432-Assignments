@@ -198,6 +198,8 @@ export default function ManageRidePage() {
 		setShowOldRoute(true);
 		setShowNewRoute(true);
 		setPendingRouteLoading(true);
+		setPendingRoutePath([]);
+		setOldRoutePath([]);
 		try {
 			const rideStart = decodeGeohash(ride?.Start_GeoHash);
 			const rideEnd = decodeGeohash(ride?.End_GeoHash);
@@ -326,6 +328,9 @@ export default function ManageRidePage() {
 						<li key={`confirmed-${booking.BookingID}`}>
 							<strong>Booking #{booking.BookingID}</strong>
 							<span>
+								Rider {booking.Passenger_Name || "Unknown"} • Rating {booking.Passenger_Rating ?? "-"}
+							</span>
+							<span>
 								Pickup {booking.Pickup_GeoHash} → Drop {booking.Drop_GeoHash}
 							</span>
 						</li>
@@ -345,6 +350,9 @@ export default function ManageRidePage() {
 					{pendingRequests.map(pending => (
 						<li key={pending.BookingID}>
 							<strong>Booking #{pending.BookingID}</strong>
+							<span>
+								Rider {pending.Passenger_Name || "Unknown"} • Rating {pending.Passenger_Rating ?? "-"}
+							</span>
 							<span>
 								Pickup {pending.Pickup_GeoHash} → Drop {pending.Drop_GeoHash}
 							</span>

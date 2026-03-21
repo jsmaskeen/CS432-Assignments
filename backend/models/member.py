@@ -27,7 +27,7 @@ class Member(Base):
     OAUTH_TOKEN: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     Email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     Full_Name: Mapped[str] = mapped_column(String(100), nullable=False)
-    Reputation_Score: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False, default=Decimal("0.0"))
+    Reputation_Score: Mapped[Decimal] = mapped_column(Numeric(2, 1), nullable=False, default=Decimal("5.0"))
     Phone_Number: Mapped[str | None] = mapped_column(String(15), nullable=True)
     Created_At: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     Gender: Mapped[str] = mapped_column(

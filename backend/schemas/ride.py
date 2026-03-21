@@ -61,6 +61,8 @@ class BookingReadResponse(BaseModel):
     Drop_GeoHash: str
     Distance_Travelled_KM: Decimal
     Booked_At: datetime
+    Passenger_Name: str | None = None
+    Passenger_Rating: Decimal | None = None
 
 
 class BookingStopReadResponse(BaseModel):
@@ -70,3 +72,5 @@ class BookingStopReadResponse(BaseModel):
     Pickup_GeoHash: str
     Drop_GeoHash: str
     Booked_At: datetime
+    Passenger_Name: str | None = None
+    Passenger_Rating: Decimal | None = None

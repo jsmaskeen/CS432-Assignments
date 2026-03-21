@@ -131,7 +131,30 @@ def list_pending_bookings(
         )
         .order_by(Booking.Booked_At.desc())
     )
-    return list(db.scalars(stmt))
+    bookings = list(db.scalars(stmt))
+    member_ids = {booking.Passenger_MemberID for booking in bookings}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for booking in bookings:
+        member = members.get(booking.Passenger_MemberID)
+        response.append(
+            {
+                "BookingID": booking.BookingID,
+                "RideID": booking.RideID,
+                "Passenger_MemberID": booking.Passenger_MemberID,
+                "Booking_Status": booking.Booking_Status,
+                "Pickup_GeoHash": booking.Pickup_GeoHash,
+                "Drop_GeoHash": booking.Drop_GeoHash,
+                "Distance_Travelled_KM": booking.Distance_Travelled_KM,
+                "Booked_At": booking.Booked_At,
+                "Passenger_Name": member.Full_Name if member else None,
+                "Passenger_Rating": member.Reputation_Score if member else None,
+            }
+        )
+    return response
 
 
 @router.get("/{ride_id}/bookings/confirmed-stops", response_model=list[BookingStopReadResponse])
@@ -152,7 +175,26 @@ def list_confirmed_booking_stops(
         )
         .order_by(Booking.Booked_At.asc())
     )
-    return list(db.scalars(stmt))
+    bookings = list(db.scalars(stmt))
+    member_ids = {booking.Passenger_MemberID for booking in bookings}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response = []
+    for booking in bookings:
+        member = members.get(booking.Passenger_MemberID)
+        response.append(
+            {
+                "BookingID": booking.BookingID,
+                "Pickup_GeoHash": booking.Pickup_GeoHash,
+                "Drop_GeoHash": booking.Drop_GeoHash,
+                "Booked_At": booking.Booked_At,
+                "Passenger_Name": member.Full_Name if member else None,
+                "Passenger_Rating": member.Reputation_Score if member else None,
+            }
+        )
+    return response
 
 
 @router.delete("/bookings/{booking_id}")
