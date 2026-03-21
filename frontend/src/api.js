@@ -49,6 +49,7 @@ export const api = {
 		const query = params.toString();
 		return request(`/rides${query ? `?${query}` : ""}`);
 	},
+	getRide: rideId => request(`/rides/${rideId}`),
 	createRide: data => request("/rides", { method: "POST", body: JSON.stringify(data) }),
 	bookRide: (rideId, data) =>
 		request(`/rides/${rideId}/book`, { method: "POST", body: JSON.stringify(data) }),

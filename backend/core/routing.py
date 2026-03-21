@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 from typing import Any
 
 import requests
@@ -12,6 +13,7 @@ from models.booking import Booking
 from models.ride import Ride
 
 _BASE32_MAP = {char: index for index, char in enumerate("0123456789bcdefghjkmnpqrstuvwxyz")}
+logger = logging.getLogger("rajak.routing")
 
 
 def _decode_geohash(value: str) -> tuple[float, float]:
@@ -56,6 +58,34 @@ def _ors_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     )
     response.raise_for_status()
     return response.json()
+
+
+def _osrm_distance_km(start_lat: float, start_lon: float, end_lat: float, end_lon: float) -> Decimal:
+    url = (
+        "https://router.project-osrm.org/route/v1/driving/"
+        f"{start_lon},{start_lat};{end_lon},{end_lat}?overview=false"
+    )
+    response = requests.get(url, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    route = (data.get("routes") or [None])[0]
+    distance = route.get("distance") if isinstance(route, dict) else None
+    if distance is None:
+        raise RuntimeError("OSRM returned no distance")
+    return Decimal(str(distance)) / Decimal("1000")
+
+
+def _fallback_update_distances(bookings: list[Booking]) -> int:
+    updated = 0
+    for booking in bookings:
+        pickup_lat, pickup_lon = _decode_geohash(booking.Pickup_GeoHash)
+        drop_lat, drop_lon = _decode_geohash(booking.Drop_GeoHash)
+        distance_km = _osrm_distance_km(pickup_lat, pickup_lon, drop_lat, drop_lon)
+        booking.Distance_Travelled_KM = distance_km.quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        updated += 1
+    return updated
 
 
 def recalculate_ride_route_and_distances(ride: Ride, db: Session) -> int:
@@ -106,14 +136,18 @@ def recalculate_ride_route_and_distances(ride: Ride, db: Session) -> int:
         "shipments": shipments,
     }
 
-    data = _ors_request("/optimization", payload)
-    routes = data.get("routes") or []
-    if not routes:
-        raise RuntimeError("ORS optimization returned no routes")
+    try:
+        data = _ors_request("/optimization", payload)
+        routes = data.get("routes") or []
+        if not routes:
+            raise RuntimeError("ORS optimization returned no routes")
 
-    activities = routes[0].get("activities") or []
-    if not activities:
-        raise RuntimeError("ORS optimization returned no activities")
+        activities = routes[0].get("activities") or []
+        if not activities:
+            raise RuntimeError("ORS optimization returned no activities")
+    except Exception as exc:
+        logger.warning("routing.ors_failed ride_id=%s error=%s", ride.RideID, exc)
+        return _fallback_update_distances(bookings)
 
     pickup_distances: dict[int, Decimal] = {}
     delivery_distances: dict[int, Decimal] = {}

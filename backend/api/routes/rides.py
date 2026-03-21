@@ -37,6 +37,17 @@ def list_rides(
     return list(db.scalars(stmt))
 
 
+@router.get("/{ride_id}", response_model=RideReadResponse)
+def get_ride(
+    ride_id: int,
+    db: Session = Depends(get_db_session),
+) -> Ride:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    return ride
+
+
 @router.post("", response_model=RideReadResponse, status_code=status.HTTP_201_CREATED)
 def create_ride(
     payload: RideCreateRequest,
