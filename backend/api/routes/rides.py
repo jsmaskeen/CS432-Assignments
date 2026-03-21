@@ -15,7 +15,7 @@ from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
 from models.settlement import CostSettlement
-from schemas.ride import RideCreateRequest, RideReadResponse, RideUpdateRequest
+from schemas.ride import BookingReadResponse, RideCreateRequest, RideReadResponse, RideUpdateRequest, RideWithBookingsResponse
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 logger = logging.getLogger("rajak.rides")
@@ -159,6 +159,23 @@ def start_ride(
         details={"ride_id": ride.RideID},
     )
     return ride
+
+
+@router.get("/{ride_id}/with-bookings", response_model=RideWithBookingsResponse)
+def get_ride_with_bookings(
+    ride_id: int,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db_session),
+) -> RideWithBookingsResponse:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+    if ride.Host_MemberID != current_member.MemberID:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can view bookings for this ride")
+
+    stmt = select(Booking).where(Booking.RideID == ride_id).order_by(Booking.Booked_At.desc())
+    bookings = list(db.scalars(stmt))
+    return RideWithBookingsResponse(ride=ride, bookings=bookings)
 
 
 @router.post("/{ride_id}/end", response_model=RideReadResponse)
