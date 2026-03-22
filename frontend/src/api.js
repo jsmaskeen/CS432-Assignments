@@ -68,8 +68,7 @@ export const api = {
 		request("/saved-addresses", { method: "POST", body: JSON.stringify(data) }),
 	updateSavedAddress: (addressId, data) =>
 		request(`/saved-addresses/${addressId}`, { method: "PATCH", body: JSON.stringify(data) }),
-	deleteSavedAddress: addressId =>
-		request(`/saved-addresses/${addressId}`, { method: "DELETE" }),
+	deleteSavedAddress: addressId => request(`/saved-addresses/${addressId}`, { method: "DELETE" }),
 	listLocations: ({ search = "", location_type = "", limit = 100 } = {}) => {
 		const params = new URLSearchParams();
 		if (search) params.set("search", search);
@@ -77,6 +76,7 @@ export const api = {
 		if (limit) params.set("limit", String(limit));
 		return request(`/locations?${params.toString()}`);
 	},
+	createLocation: data => request("/locations", { method: "POST", body: JSON.stringify(data) }),
 	myPreference: () => request("/preferences/me"),
 	upsertPreference: data =>
 		request("/preferences/me", { method: "PUT", body: JSON.stringify(data) }),

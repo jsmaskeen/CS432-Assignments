@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "../api";
 
@@ -68,7 +69,12 @@ export default function SavedLocationsPage() {
 	return (
 		<div className="page">
 			<section className="card">
-				<h2>Saved Locations</h2>
+				<div className="section-title">
+					<h2>Saved Locations</h2>
+					<Link to="/locations" className="btn ghost">
+						Go to Locations Page
+					</Link>
+				</div>
 				<form className="form-card compact" onSubmit={handleCreate}>
 					<input
 						placeholder="Label (Home, Lab, Hostel)"

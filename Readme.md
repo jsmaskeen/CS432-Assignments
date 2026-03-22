@@ -2,6 +2,12 @@
 
 Cab sharing portal made for students of IIT Gandhinagar, developed across four assignments for the course CS 432 Databases (Track 1).
 
+## To Run
+
+```
+cd backend
+uvicorn main:app --reload
+```
 
 ## Assignments:
 1. Assignment 1:
