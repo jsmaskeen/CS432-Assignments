@@ -1,0 +1,350 @@
+{
+  "paths": {
+    "/api/v1/admin/members": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/admin/members/{member_id}/role": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      }
+    },
+    "/api/v1/admin/audit-logs": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/admin/tables": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/admin/tables/{table_name}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      }
+    },
+    "/api/v1/admin/tables/{table_name}/{pk}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path"
+          },
+          {
+            "name": "pk",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path"
+          },
+          {
+            "name": "pk",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      },
+      "post": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/rides/{ride_id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/{ride_id}/start": {
+      "post": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/{ride_id}/with-bookings": {
+      "get": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/{ride_id}/end": {
+      "post": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/{ride_id}/book": {
+      "post": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      }
+    },
+    "/api/v1/rides/my/bookings": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/{ride_id}/bookings/pending": {
+      "get": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/bookings/{booking_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "booking_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/bookings/{booking_id}/accept": {
+      "post": {
+        "parameters": [
+          {
+            "name": "booking_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/rides/bookings/{booking_id}/reject": {
+      "post": {
+        "parameters": [
+          {
+            "name": "booking_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/locations": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      },
+      "post": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/locations/{location_id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/preferences/me": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      },
+      "put": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/reviews": {
+      "post": {
+        "parameters": [],
+        "has_body": true
+      }
+    },
+    "/api/v1/reviews/ride/{ride_id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/reviews/member/{member_id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/reviews/my": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/reviews/{review_id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/settlements/{settlement_id}/status": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path"
+          }
+        ],
+        "has_body": true
+      }
+    },
+    "/api/v1/settlements/booking/{booking_id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "booking_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/settlements/my": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/chat/ride/{ride_id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "ride_id",
+            "in": "path"
+          }
+        ],
+        "has_body": false
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    },
+    "/api/v1/testing/db": {
+      "get": {
+        "parameters": [],
+        "has_body": false
+      }
+    }
+  }
+}

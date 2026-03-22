@@ -1,0 +1,356 @@
+[
+  {
+    "path": "/api/v1/admin/members",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/members/{member_id}/role",
+    "method": "PATCH",
+    "subsection": "admin",
+    "required_params": [
+      "member_id"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/rides/stats",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/audit-logs",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/rides/active",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/rides/open",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/rides/completed",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/rides/{ride_id}/participants",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/rides/{ride_id}/chats",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/tables",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/admin/tables/{table_name}",
+    "method": "GET",
+    "subsection": "admin",
+    "required_params": [
+      "table_name"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/tables/{table_name}",
+    "method": "POST",
+    "subsection": "admin",
+    "required_params": [
+      "table_name"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/tables/{table_name}/{pk}",
+    "method": "PATCH",
+    "subsection": "admin",
+    "required_params": [
+      "table_name",
+      "pk"
+    ]
+  },
+  {
+    "path": "/api/v1/admin/tables/{table_name}/{pk}",
+    "method": "DELETE",
+    "subsection": "admin",
+    "required_params": [
+      "table_name",
+      "pk"
+    ]
+  },
+  {
+    "path": "/api/v1/auth/register",
+    "method": "POST",
+    "subsection": "auth",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/auth/login",
+    "method": "POST",
+    "subsection": "auth",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/auth/me",
+    "method": "GET",
+    "subsection": "auth",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/rides",
+    "method": "GET",
+    "subsection": "rides",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/rides",
+    "method": "POST",
+    "subsection": "rides",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}",
+    "method": "PATCH",
+    "subsection": "rides",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}",
+    "method": "DELETE",
+    "subsection": "rides",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}/start",
+    "method": "POST",
+    "subsection": "rides",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}/with-bookings",
+    "method": "GET",
+    "subsection": "rides",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}/end",
+    "method": "POST",
+    "subsection": "rides",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}/book",
+    "method": "POST",
+    "subsection": "bookings",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/my/bookings",
+    "method": "GET",
+    "subsection": "bookings",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/rides/{ride_id}/bookings/pending",
+    "method": "GET",
+    "subsection": "bookings",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/bookings/{booking_id}",
+    "method": "DELETE",
+    "subsection": "bookings",
+    "required_params": [
+      "booking_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/bookings/{booking_id}/accept",
+    "method": "POST",
+    "subsection": "bookings",
+    "required_params": [
+      "booking_id"
+    ]
+  },
+  {
+    "path": "/api/v1/rides/bookings/{booking_id}/reject",
+    "method": "POST",
+    "subsection": "bookings",
+    "required_params": [
+      "booking_id"
+    ]
+  },
+  {
+    "path": "/api/v1/locations",
+    "method": "GET",
+    "subsection": "locations",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/locations",
+    "method": "POST",
+    "subsection": "locations",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/locations/{location_id}",
+    "method": "GET",
+    "subsection": "locations",
+    "required_params": [
+      "location_id"
+    ]
+  },
+  {
+    "path": "/api/v1/preferences/me",
+    "method": "GET",
+    "subsection": "preferences",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/preferences/me",
+    "method": "PUT",
+    "subsection": "preferences",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/reviews",
+    "method": "POST",
+    "subsection": "reviews",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/reviews/ride/{ride_id}",
+    "method": "GET",
+    "subsection": "reviews",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/reviews/member/{member_id}",
+    "method": "GET",
+    "subsection": "reviews",
+    "required_params": [
+      "member_id"
+    ]
+  },
+  {
+    "path": "/api/v1/reviews/my",
+    "method": "GET",
+    "subsection": "reviews",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/reviews/{review_id}",
+    "method": "DELETE",
+    "subsection": "reviews",
+    "required_params": [
+      "review_id"
+    ]
+  },
+  {
+    "path": "/api/v1/settlements/{settlement_id}/status",
+    "method": "PATCH",
+    "subsection": "settlements",
+    "required_params": [
+      "settlement_id"
+    ]
+  },
+  {
+    "path": "/api/v1/settlements/booking/{booking_id}",
+    "method": "GET",
+    "subsection": "settlements",
+    "required_params": [
+      "booking_id"
+    ]
+  },
+  {
+    "path": "/api/v1/settlements/my",
+    "method": "GET",
+    "subsection": "settlements",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/chat/ride/{ride_id}",
+    "method": "GET",
+    "subsection": "chat",
+    "required_params": [
+      "ride_id"
+    ]
+  },
+  {
+    "path": "/api/v1/saved-addresses",
+    "method": "GET",
+    "subsection": "saved-addresses",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/saved-addresses",
+    "method": "POST",
+    "subsection": "saved-addresses",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/saved-addresses/{address_id}",
+    "method": "PATCH",
+    "subsection": "saved-addresses",
+    "required_params": [
+      "address_id"
+    ]
+  },
+  {
+    "path": "/api/v1/saved-addresses/{address_id}",
+    "method": "DELETE",
+    "subsection": "saved-addresses",
+    "required_params": [
+      "address_id"
+    ]
+  },
+  {
+    "path": "/api/v1/health",
+    "method": "GET",
+    "subsection": "testing",
+    "required_params": []
+  },
+  {
+    "path": "/api/v1/testing/db",
+    "method": "GET",
+    "subsection": "testing",
+    "required_params": []
+  }
+]

@@ -1,0 +1,414 @@
+{
+    "admin :: GET /api/v1/admin/members": {
+        "method": "GET",
+        "url": "/admin/members",
+        "avg_ms": 2770.0887203216553,
+        "max_ms": 2890.0632858276367,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: PATCH /api/v1/admin/members/{member_id}/role": {
+        "method": "PATCH",
+        "url": "/admin/members/20028/role",
+        "avg_ms": 8.73711109161377,
+        "max_ms": 10.113239288330078,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/stats": {
+        "method": "GET",
+        "url": "/admin/rides/stats",
+        "avg_ms": 72.85290956497192,
+        "max_ms": 78.37343215942383,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/audit-logs": {
+        "method": "GET",
+        "url": "/admin/audit-logs",
+        "avg_ms": 30.134379863739014,
+        "max_ms": 50.11558532714844,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/active": {
+        "method": "GET",
+        "url": "/admin/rides/active",
+        "avg_ms": 6.034886837005615,
+        "max_ms": 7.174491882324219,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/open": {
+        "method": "GET",
+        "url": "/admin/rides/open",
+        "avg_ms": 207.64371156692505,
+        "max_ms": 293.18690299987793,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/completed": {
+        "method": "GET",
+        "url": "/admin/rides/completed",
+        "avg_ms": 209.71579551696777,
+        "max_ms": 286.5791320800781,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/{ride_id}/participants": {
+        "method": "GET",
+        "url": "/admin/rides/20026/participants",
+        "avg_ms": 9.679853916168213,
+        "max_ms": 14.802694320678711,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/rides/{ride_id}/chats": {
+        "method": "GET",
+        "url": "/admin/rides/20026/chats",
+        "avg_ms": 7.834231853485107,
+        "max_ms": 8.357048034667969,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/tables": {
+        "method": "GET",
+        "url": "/admin/tables",
+        "avg_ms": 6.806445121765137,
+        "max_ms": 7.948160171508789,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: GET /api/v1/admin/tables/{table_name}": {
+        "method": "GET",
+        "url": "/admin/tables/Locations",
+        "avg_ms": 10.871458053588867,
+        "max_ms": 12.542724609375,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: POST /api/v1/admin/tables/{table_name}": {
+        "method": "POST",
+        "url": "/admin/tables/Locations",
+        "avg_ms": 13.459432125091553,
+        "max_ms": 28.78546714782715,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: PATCH /api/v1/admin/tables/{table_name}/{pk}": {
+        "method": "PATCH",
+        "url": "/admin/tables/Locations/1051",
+        "avg_ms": 12.191855907440186,
+        "max_ms": 12.83407211303711,
+        "success": "20/20",
+        "failures": []
+    },
+    "admin :: DELETE /api/v1/admin/tables/{table_name}/{pk}": {
+        "method": "DELETE",
+        "url": "/admin/tables/Locations/1051",
+        "avg_ms": 13.978970050811768,
+        "max_ms": 32.18531608581543,
+        "success": "20/20",
+        "failures": []
+    },
+    "auth :: POST /api/v1/auth/register": {
+        "method": "POST",
+        "url": "/auth/register",
+        "avg_ms": 269.40335035324097,
+        "max_ms": 308.7785243988037,
+        "success": "20/20",
+        "failures": []
+    },
+    "auth :: POST /api/v1/auth/login": {
+        "method": "POST",
+        "url": "/auth/login",
+        "avg_ms": 252.42587327957153,
+        "max_ms": 268.56327056884766,
+        "success": "20/20",
+        "failures": []
+    },
+    "auth :: GET /api/v1/auth/me": {
+        "method": "GET",
+        "url": "/auth/me",
+        "avg_ms": 7.919740676879883,
+        "max_ms": 12.062788009643555,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: GET /api/v1/rides": {
+        "method": "GET",
+        "url": "/rides",
+        "avg_ms": 10.135853290557861,
+        "max_ms": 10.825872421264648,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: POST /api/v1/rides": {
+        "method": "POST",
+        "url": "/rides",
+        "avg_ms": 17.5484299659729,
+        "max_ms": 27.735471725463867,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: PATCH /api/v1/rides/{ride_id}": {
+        "method": "PATCH",
+        "url": "/rides/20026",
+        "avg_ms": 9.807312488555908,
+        "max_ms": 12.52126693725586,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: DELETE /api/v1/rides/{ride_id}": {
+        "method": "DELETE",
+        "url": "/rides/20026",
+        "avg_ms": 9.751009941101074,
+        "max_ms": 10.909080505371094,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: POST /api/v1/rides/{ride_id}/start": {
+        "method": "POST",
+        "url": "/rides/20026/start",
+        "avg_ms": 16.411316394805908,
+        "max_ms": 26.36122703552246,
+        "success": "0/20",
+        "failures": [
+            "500: Internal Server Error",
+            "500: Internal Server Error",
+            "500: Internal Server Error"
+        ]
+    },
+    "rides :: GET /api/v1/rides/{ride_id}/with-bookings": {
+        "method": "GET",
+        "url": "/rides/20027/with-bookings",
+        "avg_ms": 7.6905012130737305,
+        "max_ms": 9.022951126098633,
+        "success": "20/20",
+        "failures": []
+    },
+    "rides :: POST /api/v1/rides/{ride_id}/end": {
+        "method": "POST",
+        "url": "/rides/20026/end",
+        "avg_ms": 7.338559627532959,
+        "max_ms": 7.929563522338867,
+        "success": "0/20",
+        "failures": [
+            "400: {\"detail\":\"Ride is not started\"}",
+            "400: {\"detail\":\"Ride is not started\"}",
+            "400: {\"detail\":\"Ride is not started\"}"
+        ]
+    },
+    "bookings :: POST /api/v1/rides/{ride_id}/book": {
+        "method": "POST",
+        "url": "/rides/20026/book",
+        "avg_ms": 12.2871994972229,
+        "max_ms": 16.598224639892578,
+        "success": "20/20",
+        "failures": []
+    },
+    "bookings :: GET /api/v1/rides/my/bookings": {
+        "method": "GET",
+        "url": "/rides/my/bookings",
+        "avg_ms": 7.6573967933654785,
+        "max_ms": 8.575677871704102,
+        "success": "20/20",
+        "failures": []
+    },
+    "bookings :: GET /api/v1/rides/{ride_id}/bookings/pending": {
+        "method": "GET",
+        "url": "/rides/20026/bookings/pending",
+        "avg_ms": 8.271181583404541,
+        "max_ms": 10.44607162475586,
+        "success": "20/20",
+        "failures": []
+    },
+    "bookings :: DELETE /api/v1/rides/bookings/{booking_id}": {
+        "method": "DELETE",
+        "url": "/rides/bookings/30061",
+        "avg_ms": 12.465393543243408,
+        "max_ms": 16.627788543701172,
+        "success": "20/20",
+        "failures": []
+    },
+    "bookings :: POST /api/v1/rides/bookings/{booking_id}/accept": {
+        "method": "POST",
+        "url": "/rides/bookings/30061/accept",
+        "avg_ms": 17.413330078125,
+        "max_ms": 36.31758689880371,
+        "success": "0/20",
+        "failures": [
+            "500: Internal Server Error",
+            "500: Internal Server Error",
+            "500: Internal Server Error"
+        ]
+    },
+    "bookings :: POST /api/v1/rides/bookings/{booking_id}/reject": {
+        "method": "POST",
+        "url": "/rides/bookings/30061/reject",
+        "avg_ms": 12.577295303344727,
+        "max_ms": 13.520956039428711,
+        "success": "20/20",
+        "failures": []
+    },
+    "locations :: GET /api/v1/locations": {
+        "method": "GET",
+        "url": "/locations",
+        "avg_ms": 7.192182540893555,
+        "max_ms": 8.564472198486328,
+        "success": "20/20",
+        "failures": []
+    },
+    "locations :: POST /api/v1/locations": {
+        "method": "POST",
+        "url": "/locations",
+        "avg_ms": 7.592225074768066,
+        "max_ms": 12.391090393066406,
+        "success": "20/20",
+        "failures": []
+    },
+    "locations :: GET /api/v1/locations/{location_id}": {
+        "method": "GET",
+        "url": "/locations/1031",
+        "avg_ms": 4.3096184730529785,
+        "max_ms": 5.429744720458984,
+        "success": "20/20",
+        "failures": []
+    },
+    "preferences :: GET /api/v1/preferences/me": {
+        "method": "GET",
+        "url": "/preferences/me",
+        "avg_ms": 6.541800498962402,
+        "max_ms": 7.35783576965332,
+        "success": "20/20",
+        "failures": []
+    },
+    "preferences :: PUT /api/v1/preferences/me": {
+        "method": "PUT",
+        "url": "/preferences/me",
+        "avg_ms": 13.804793357849121,
+        "max_ms": 26.39174461364746,
+        "success": "20/20",
+        "failures": []
+    },
+    "reviews :: POST /api/v1/reviews": {
+        "method": "POST",
+        "url": "/reviews",
+        "avg_ms": 13.76882791519165,
+        "max_ms": 15.381336212158203,
+        "success": "20/20",
+        "failures": []
+    },
+    "reviews :: GET /api/v1/reviews/ride/{ride_id}": {
+        "method": "GET",
+        "url": "/reviews/ride/20029",
+        "avg_ms": 6.81082010269165,
+        "max_ms": 7.877111434936523,
+        "success": "20/20",
+        "failures": []
+    },
+    "reviews :: GET /api/v1/reviews/member/{member_id}": {
+        "method": "GET",
+        "url": "/reviews/member/20027",
+        "avg_ms": 10.987496376037598,
+        "max_ms": 25.539159774780273,
+        "success": "20/20",
+        "failures": []
+    },
+    "reviews :: GET /api/v1/reviews/my": {
+        "method": "GET",
+        "url": "/reviews/my",
+        "avg_ms": 8.58238935470581,
+        "max_ms": 9.90152359008789,
+        "success": "20/20",
+        "failures": []
+    },
+    "reviews :: DELETE /api/v1/reviews/{review_id}": {
+        "method": "DELETE",
+        "url": "/reviews/15059",
+        "avg_ms": 11.77889108657837,
+        "max_ms": 22.487640380859375,
+        "success": "20/20",
+        "failures": []
+    },
+    "settlements :: PATCH /api/v1/settlements/{settlement_id}/status": {
+        "method": "PATCH",
+        "url": "/settlements/1/status",
+        "avg_ms": 11.30521297454834,
+        "max_ms": 13.246297836303711,
+        "success": "20/20",
+        "failures": []
+    },
+    "settlements :: GET /api/v1/settlements/booking/{booking_id}": {
+        "method": "GET",
+        "url": "/settlements/booking/30061",
+        "avg_ms": 9.036052227020264,
+        "max_ms": 13.439178466796875,
+        "success": "20/20",
+        "failures": []
+    },
+    "settlements :: GET /api/v1/settlements/my": {
+        "method": "GET",
+        "url": "/settlements/my",
+        "avg_ms": 26.288151741027832,
+        "max_ms": 29.081344604492188,
+        "success": "20/20",
+        "failures": []
+    },
+    "chat :: GET /api/v1/chat/ride/{ride_id}": {
+        "method": "GET",
+        "url": "/chat/ride/20026",
+        "avg_ms": 7.621419429779053,
+        "max_ms": 8.459329605102539,
+        "success": "20/20",
+        "failures": []
+    },
+    "saved-addresses :: GET /api/v1/saved-addresses": {
+        "method": "GET",
+        "url": "/saved-addresses",
+        "avg_ms": 5.812942981719971,
+        "max_ms": 6.479024887084961,
+        "success": "20/20",
+        "failures": []
+    },
+    "saved-addresses :: POST /api/v1/saved-addresses": {
+        "method": "POST",
+        "url": "/saved-addresses",
+        "avg_ms": 10.920524597167969,
+        "max_ms": 21.365642547607422,
+        "success": "20/20",
+        "failures": []
+    },
+    "saved-addresses :: PATCH /api/v1/saved-addresses/{address_id}": {
+        "method": "PATCH",
+        "url": "/saved-addresses/26",
+        "avg_ms": 10.348653793334961,
+        "max_ms": 13.3056640625,
+        "success": "20/20",
+        "failures": []
+    },
+    "saved-addresses :: DELETE /api/v1/saved-addresses/{address_id}": {
+        "method": "DELETE",
+        "url": "/saved-addresses/26",
+        "avg_ms": 10.79317331314087,
+        "max_ms": 19.623994827270508,
+        "success": "20/20",
+        "failures": []
+    },
+    "testing :: GET /api/v1/health": {
+        "method": "GET",
+        "url": "/health",
+        "avg_ms": 2.2580623626708984,
+        "max_ms": 2.9363632202148438,
+        "success": "20/20",
+        "failures": []
+    },
+    "testing :: GET /api/v1/testing/db": {
+        "method": "GET",
+        "url": "/testing/db",
+        "avg_ms": 3.794074058532715,
+        "max_ms": 4.514217376708984,
+        "success": "20/20",
+        "failures": []
+    }
+}

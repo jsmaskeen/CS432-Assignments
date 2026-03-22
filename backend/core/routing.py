@@ -1,0 +1,207 @@
+from __future__ import annotations
+
+from decimal import Decimal, ROUND_HALF_UP
+import logging
+import math
+from typing import Any
+
+import requests
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from core.config import settings
+from models.booking import Booking
+from models.ride import Ride
+
+_BASE32_MAP = {char: index for index, char in enumerate("0123456789bcdefghjkmnpqrstuvwxyz")}
+logger = logging.getLogger("rajak.routing")
+
+
+def _decode_geohash(value: str) -> tuple[float, float]:
+    lat_interval = [-90.0, 90.0]
+    lon_interval = [-180.0, 180.0]
+    is_even = True
+
+    for char in value.lower().strip():
+        if char not in _BASE32_MAP:
+            raise ValueError("Invalid geohash")
+        bits = _BASE32_MAP[char]
+        for mask in (16, 8, 4, 2, 1):
+            if is_even:
+                mid = (lon_interval[0] + lon_interval[1]) / 2
+                if bits & mask:
+                    lon_interval[0] = mid
+                else:
+                    lon_interval[1] = mid
+            else:
+                mid = (lat_interval[0] + lat_interval[1]) / 2
+                if bits & mask:
+                    lat_interval[0] = mid
+                else:
+                    lat_interval[1] = mid
+            is_even = not is_even
+
+    lat = (lat_interval[0] + lat_interval[1]) / 2
+    lon = (lon_interval[0] + lon_interval[1]) / 2
+    return lat, lon
+
+
+def _ors_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if not settings.ORS_API_KEY:
+        raise RuntimeError("ORS_API_KEY is not configured")
+
+    url = f"{settings.ORS_BASE_URL.rstrip('/')}{path}"
+    response = requests.post(
+        url,
+        json=payload,
+        headers={"Authorization": settings.ORS_API_KEY},
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _osrm_distance_km(start_lat: float, start_lon: float, end_lat: float, end_lon: float) -> Decimal:
+    url = (
+        "https://router.project-osrm.org/route/v1/driving/"
+        f"{start_lon},{start_lat};{end_lon},{end_lat}?overview=false"
+    )
+    response = requests.get(url, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    route = (data.get("routes") or [None])[0]
+    distance = route.get("distance") if isinstance(route, dict) else None
+    if distance is None:
+        raise RuntimeError("OSRM returned no distance")
+    return Decimal(str(distance)) / Decimal("1000")
+
+
+def _fallback_update_distances(bookings: list[Booking]) -> int:
+    updated = 0
+    for booking in bookings:
+        pickup_lat, pickup_lon = _decode_geohash(booking.Pickup_GeoHash)
+        drop_lat, drop_lon = _decode_geohash(booking.Drop_GeoHash)
+        distance_km = _osrm_distance_km(pickup_lat, pickup_lon, drop_lat, drop_lon)
+        booking.Distance_Travelled_KM = distance_km.quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        updated += 1
+    return updated
+
+
+def calculate_booking_distance_km(pickup_geohash: str, drop_geohash: str) -> Decimal:
+    pickup_lat, pickup_lon = _decode_geohash(pickup_geohash)
+    drop_lat, drop_lon = _decode_geohash(drop_geohash)
+
+    if pickup_geohash.strip().lower() == drop_geohash.strip().lower():
+        raise ValueError("Pickup and drop geohash cannot be the same")
+
+    try:
+        distance_km = _osrm_distance_km(pickup_lat, pickup_lon, drop_lat, drop_lon)
+    except Exception as exc:
+        logger.warning("routing.osrm_direct_failed error=%s", exc)
+        # Haversine fallback when OSRM is unavailable.
+        lat1 = math.radians(pickup_lat)
+        lon1 = math.radians(pickup_lon)
+        lat2 = math.radians(drop_lat)
+        lon2 = math.radians(drop_lon)
+        d_lat = lat2 - lat1
+        d_lon = lon2 - lon1
+        a = math.sin(d_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(d_lon / 2) ** 2
+        c = 2 * math.asin(min(1.0, math.sqrt(a)))
+        distance_km = Decimal(str(6371.0 * c))
+
+    quantized = distance_km.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if quantized <= Decimal("0"):
+        raise ValueError("Distance must be greater than 0")
+    return quantized
+
+
+def recalculate_ride_route_and_distances(ride: Ride, db: Session) -> int:
+    bookings = list(
+        db.scalars(
+            select(Booking).where(
+                Booking.RideID == ride.RideID,
+                Booking.Booking_Status == "Confirmed",
+                Booking.Passenger_MemberID != ride.Host_MemberID,
+            )
+        )
+    )
+    if not bookings:
+        return 0
+
+    start_lat, start_lon = _decode_geohash(ride.Start_GeoHash)
+    end_lat, end_lon = _decode_geohash(ride.End_GeoHash)
+
+    shipments: list[dict[str, Any]] = []
+    id_map: dict[int, tuple[str, int]] = {}
+    next_id = 1
+    for booking in bookings:
+        pickup_lat, pickup_lon = _decode_geohash(booking.Pickup_GeoHash)
+        drop_lat, drop_lon = _decode_geohash(booking.Drop_GeoHash)
+        pickup_id = next_id
+        delivery_id = next_id + 1
+        next_id += 2
+
+        id_map[pickup_id] = ("pickup", booking.BookingID)
+        id_map[delivery_id] = ("delivery", booking.BookingID)
+
+        shipments.append(
+            {
+                "pickup": {"id": pickup_id, "location": [pickup_lon, pickup_lat]},
+                "delivery": {"id": delivery_id, "location": [drop_lon, drop_lat]},
+            }
+        )
+
+    payload = {
+        "vehicles": [
+            {
+                "id": 1,
+                "profile": "driving-car",
+                "start": [start_lon, start_lat],
+                "end": [end_lon, end_lat],
+            }
+        ],
+        "shipments": shipments,
+    }
+
+    try:
+        data = _ors_request("/optimization", payload)
+        routes = data.get("routes") or []
+        if not routes:
+            raise RuntimeError("ORS optimization returned no routes")
+
+        activities = routes[0].get("activities") or []
+        if not activities:
+            raise RuntimeError("ORS optimization returned no activities")
+    except Exception as exc:
+        logger.warning("routing.ors_failed ride_id=%s error=%s", ride.RideID, exc)
+        return _fallback_update_distances(bookings)
+
+    pickup_distances: dict[int, Decimal] = {}
+    delivery_distances: dict[int, Decimal] = {}
+    for activity in activities:
+        activity_id = activity.get("id")
+        if activity_id is None or activity_id not in id_map:
+            continue
+        distance = activity.get("distance")
+        if distance is None:
+            continue
+        distance_km = Decimal(str(distance)) / Decimal("1000")
+        kind, booking_id = id_map[activity_id]
+        if kind == "pickup":
+            pickup_distances[booking_id] = distance_km
+        else:
+            delivery_distances[booking_id] = distance_km
+
+    updated = 0
+    for booking in bookings:
+        pickup_km = pickup_distances.get(booking.BookingID)
+        delivery_km = delivery_distances.get(booking.BookingID)
+        if pickup_km is None or delivery_km is None or delivery_km < pickup_km:
+            continue
+        distance_km = (delivery_km - pickup_km).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        booking.Distance_Travelled_KM = distance_km
+        updated += 1
+
+    return updated
