@@ -116,8 +116,7 @@ def create_ride(
         Ride_Status="Full" if available_seats == 0 else "Open",
     )
     db.add(ride)
-    db.commit()
-    db.refresh(ride)
+    db.flush()
     host_booking = Booking(
         RideID=ride.RideID,
         Passenger_MemberID=current_member.MemberID,
@@ -140,6 +139,7 @@ def create_ride(
     db.add(host_participant)
     db.add(message)
     db.commit()
+    db.refresh(ride)
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
     audit_event(
         action="rides.create",
