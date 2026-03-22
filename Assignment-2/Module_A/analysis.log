@@ -1,0 +1,96 @@
+2026-03-21 20:36:47,858 - PerformanceAnalysisLogs - INFO - Scaling size (degree=200)
+2026-03-21 20:36:47,862 - PerformanceAnalysisLogs - INFO -   N=   100  B+Tree  insert=0.000513s  search_hit=0.000010100s  delete=0.000020200s  range=0.000004s
+2026-03-21 20:36:47,866 - PerformanceAnalysisLogs - INFO -   N=   100  Brute  insert=0.000610s  search_hit=0.000029000s  delete=0.000040200s  range=0.000008s
+2026-03-21 20:36:47,871 - PerformanceAnalysisLogs - INFO -   N=   200  B+Tree  insert=0.000629s  search_hit=0.000015400s  delete=0.000026400s  range=0.000003s
+2026-03-21 20:36:47,883 - PerformanceAnalysisLogs - INFO -   N=   200  Brute  insert=0.001600s  search_hit=0.000110700s  delete=0.000141600s  range=0.000017s
+2026-03-21 20:36:47,894 - PerformanceAnalysisLogs - INFO -   N=   400  B+Tree  insert=0.001546s  search_hit=0.000040900s  delete=0.000081000s  range=0.000007s
+2026-03-21 20:36:47,954 - PerformanceAnalysisLogs - INFO -   N=   400  Brute  insert=0.007548s  search_hit=0.000511700s  delete=0.000778400s  range=0.000039s
+2026-03-21 20:36:47,979 - PerformanceAnalysisLogs - INFO -   N=   800  B+Tree  insert=0.003759s  search_hit=0.000106800s  delete=0.000166500s  range=0.000010s
+2026-03-21 20:36:48,112 - PerformanceAnalysisLogs - INFO -   N=   800  Brute  insert=0.015864s  search_hit=0.001431600s  delete=0.002252500s  range=0.000059s
+2026-03-21 20:36:48,160 - PerformanceAnalysisLogs - INFO -   N=  1600  B+Tree  insert=0.007955s  search_hit=0.000159600s  delete=0.000305100s  range=0.000016s
+2026-03-21 20:36:48,701 - PerformanceAnalysisLogs - INFO -   N=  1600  Brute  insert=0.063533s  search_hit=0.005702400s  delete=0.009140400s  range=0.000123s
+2026-03-21 20:36:48,779 - PerformanceAnalysisLogs - INFO -   N=  3200  B+Tree  insert=0.013375s  search_hit=0.000288700s  delete=0.000700300s  range=0.000031s
+2026-03-21 20:36:50,875 - PerformanceAnalysisLogs - INFO -   N=  3200  Brute  insert=0.241351s  search_hit=0.021760000s  delete=0.038291800s  range=0.000315s
+2026-03-21 20:36:51,048 - PerformanceAnalysisLogs - INFO -   N=  6400  B+Tree  insert=0.028160s  search_hit=0.000600900s  delete=0.001592000s  range=0.000083s
+2026-03-21 20:37:00,021 - PerformanceAnalysisLogs - INFO -   N=  6400  Brute  insert=1.073838s  search_hit=0.099087700s  delete=0.153709200s  range=0.000517s
+2026-03-21 20:37:00,361 - PerformanceAnalysisLogs - INFO -   N= 12800  B+Tree  insert=0.057607s  search_hit=0.001337700s  delete=0.002829600s  range=0.000118s
+2026-03-21 20:37:42,543 - PerformanceAnalysisLogs - INFO -   N= 12800  Brute  insert=4.992173s  search_hit=0.487169300s  delete=0.692996400s  range=0.001347s
+2026-03-21 20:37:43,518 - PerformanceAnalysisLogs - INFO -   N= 25600  B+Tree  insert=0.155139s  search_hit=0.003628800s  delete=0.009084400s  range=0.000347s
+2026-03-21 20:40:45,171 - PerformanceAnalysisLogs - INFO -   N= 25600  Brute  insert=20.988340s  search_hit=2.213491100s  delete=3.154402600s  range=0.002466s
+2026-03-21 20:40:46,221 - PerformanceAnalysisLogs - INFO -   N= 32000  B+Tree  insert=0.163431s  search_hit=0.004584000s  delete=0.008878100s  range=0.000371s
+2026-03-21 20:45:41,104 - PerformanceAnalysisLogs - INFO -   N= 32000  Brute  insert=34.479182s  search_hit=3.492076500s  delete=5.443174200s  range=0.004161s
+2026-03-21 20:45:41,106 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:45:42,788 - PerformanceAnalysisLogs - INFO - Varying degree (N=10000)
+2026-03-21 20:45:43,094 - PerformanceAnalysisLogs - INFO -   degree= 20  insert=0.0531s  search=0.001668400s  range=0.000116s  delete=0.000003447s
+2026-03-21 20:45:43,363 - PerformanceAnalysisLogs - INFO -   degree= 40  insert=0.0491s  search=0.001191300s  range=0.000098s  delete=0.000002345s
+2026-03-21 20:45:43,799 - PerformanceAnalysisLogs - INFO -   degree= 80  insert=0.0509s  search=0.001165700s  range=0.000108s  delete=0.000002350s
+2026-03-21 20:45:44,065 - PerformanceAnalysisLogs - INFO -   degree=160  insert=0.0485s  search=0.001458900s  range=0.000128s  delete=0.000002349s
+2026-03-21 20:45:44,338 - PerformanceAnalysisLogs - INFO -   degree=320  insert=0.0497s  search=0.001262000s  range=0.000120s  delete=0.000002209s
+2026-03-21 20:45:44,624 - PerformanceAnalysisLogs - INFO -   degree=640  insert=0.0533s  search=0.001086400s  range=0.000124s  delete=0.000002176s
+2026-03-21 20:45:44,625 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:45:44,861 - PerformanceAnalysisLogs - INFO - Key insertion order (N=10000, degree=200)
+2026-03-21 20:45:45,060 - PerformanceAnalysisLogs - INFO -     sequential  B+Tree  insert=0.0382s  search=0.000001129s
+2026-03-21 20:45:57,176 - PerformanceAnalysisLogs - INFO -     sequential  Brute   insert=2.1533s  search=0.000219774s
+2026-03-21 20:45:57,401 - PerformanceAnalysisLogs - INFO -         random  B+Tree  insert=0.0435s  search=0.000000945s
+2026-03-21 20:46:12,168 - PerformanceAnalysisLogs - INFO -         random  Brute   insert=2.6869s  search=0.000263884s
+2026-03-21 20:46:12,395 - PerformanceAnalysisLogs - INFO -        reverse  B+Tree  insert=0.0438s  search=0.000001163s
+2026-03-21 20:46:25,513 - PerformanceAnalysisLogs - INFO -        reverse  Brute   insert=2.4166s  search=0.000219865s
+2026-03-21 20:46:25,514 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:46:25,778 - PerformanceAnalysisLogs - INFO - Incremental Insert (N=6000, degree=200)
+2026-03-21 20:46:26,789 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:46:26,795 - PerformanceAnalysisLogs - INFO - B+Tree avg per-insert: 0.000003976s
+Brute  avg per-insert: 0.000152063s
+2026-03-21 20:46:26,918 - PerformanceAnalysisLogs - INFO - Bulk Delete (N=10000, degree=200)
+2026-03-21 20:46:27,267 - PerformanceAnalysisLogs - INFO - B+Tree  insert=0.0454s  delete_all=0.0228s
+2026-03-21 20:46:51,402 - PerformanceAnalysisLogs - INFO - Brute   insert=2.8267s  delete_all=1.9835s
+2026-03-21 20:46:51,403 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:46:51,488 - PerformanceAnalysisLogs - INFO - Range Queries  (N=10000, degree=200)
+2026-03-21 20:47:05,831 - PerformanceAnalysisLogs - INFO - span=0.01%  B+Tree=0.000028s  Brute=0.000776s
+2026-03-21 20:47:20,353 - PerformanceAnalysisLogs - INFO - span=0.02%  B+Tree=0.000051s  Brute=0.000796s
+2026-03-21 20:47:34,449 - PerformanceAnalysisLogs - INFO - span=0.05%  B+Tree=0.000106s  Brute=0.001120s
+2026-03-21 20:47:50,338 - PerformanceAnalysisLogs - INFO - span=0.1%  B+Tree=0.000221s  Brute=0.000784s
+2026-03-21 20:48:04,782 - PerformanceAnalysisLogs - INFO - span=0.2%  B+Tree=0.000397s  Brute=0.000872s
+2026-03-21 20:48:19,186 - PerformanceAnalysisLogs - INFO - span=0.3%  B+Tree=0.000549s  Brute=0.001113s
+2026-03-21 20:48:33,726 - PerformanceAnalysisLogs - INFO - span=0.5%  B+Tree=0.000905s  Brute=0.000970s
+2026-03-21 20:48:33,728 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:48:33,774 - PerformanceAnalysisLogs - INFO - Mixed Workload  (N=10000, ops=10000, degree=200)
+2026-03-21 20:48:37,820 - PerformanceAnalysisLogs - INFO - B+Tree  total=0.7664s  throughput=13048 ops/s
+2026-03-21 20:49:20,795 - PerformanceAnalysisLogs - INFO - Brute   total=5.6714s  throughput=1763 ops/s
+2026-03-21 20:49:20,796 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results
+2026-03-21 20:49:20,837 - PerformanceAnalysisLogs - INFO - Memory Usage Scaling (sizes=[ 2000  4000  6000  8000 10000], degrees=[20, 40, 80, 160, 320, 640])
+2026-03-21 20:49:20,988 - PerformanceAnalysisLogs - INFO -   N=  2000  Brute Force    peak_mem=0.5727MB
+2026-03-21 20:49:21,024 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=20) peak_mem=0.6523MB
+2026-03-21 20:49:21,055 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=40) peak_mem=0.6282MB
+2026-03-21 20:49:21,088 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=80) peak_mem=0.6162MB
+2026-03-21 20:49:21,120 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=160) peak_mem=0.6088MB
+2026-03-21 20:49:21,163 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=320) peak_mem=0.5898MB
+2026-03-21 20:49:21,212 - PerformanceAnalysisLogs - INFO -   N=  2000  B+Tree (d=640) peak_mem=0.6043MB
+2026-03-21 20:49:21,797 - PerformanceAnalysisLogs - INFO -   N=  4000  Brute Force    peak_mem=1.2544MB
+2026-03-21 20:49:21,878 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=20) peak_mem=1.3091MB
+2026-03-21 20:49:21,947 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=40) peak_mem=1.2416MB
+2026-03-21 20:49:22,026 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=80) peak_mem=1.2316MB
+2026-03-21 20:49:22,105 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=160) peak_mem=1.2022MB
+2026-03-21 20:49:22,172 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=320) peak_mem=1.2124MB
+2026-03-21 20:49:22,272 - PerformanceAnalysisLogs - INFO -   N=  4000  B+Tree (d=640) peak_mem=1.1968MB
+2026-03-21 20:49:23,489 - PerformanceAnalysisLogs - INFO -   N=  6000  Brute Force    peak_mem=1.9658MB
+2026-03-21 20:49:23,621 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=20) peak_mem=1.9696MB
+2026-03-21 20:49:23,725 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=40) peak_mem=1.8904MB
+2026-03-21 20:49:23,818 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=80) peak_mem=1.8508MB
+2026-03-21 20:49:23,927 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=160) peak_mem=1.8137MB
+2026-03-21 20:49:24,026 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=320) peak_mem=1.8216MB
+2026-03-21 20:49:24,135 - PerformanceAnalysisLogs - INFO -   N=  6000  B+Tree (d=640) peak_mem=1.8172MB
+2026-03-21 20:49:26,119 - PerformanceAnalysisLogs - INFO -   N=  8000  Brute Force    peak_mem=2.6583MB
+2026-03-21 20:49:26,258 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=20) peak_mem=2.6303MB
+2026-03-21 20:49:26,384 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=40) peak_mem=2.5158MB
+2026-03-21 20:49:26,503 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=80) peak_mem=2.4694MB
+2026-03-21 20:49:26,628 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=160) peak_mem=2.4390MB
+2026-03-21 20:49:26,756 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=320) peak_mem=2.4292MB
+2026-03-21 20:49:26,910 - PerformanceAnalysisLogs - INFO -   N=  8000  B+Tree (d=640) peak_mem=2.4050MB
+2026-03-21 20:49:29,963 - PerformanceAnalysisLogs - INFO -   N= 10000  Brute Force    peak_mem=3.3544MB
+2026-03-21 20:49:30,140 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=20) peak_mem=3.2911MB
+2026-03-21 20:49:30,501 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=40) peak_mem=3.1497MB
+2026-03-21 20:49:30,658 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=80) peak_mem=3.0884MB
+2026-03-21 20:49:30,808 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=160) peak_mem=3.0514MB
+2026-03-21 20:49:30,970 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=320) peak_mem=3.0353MB
+2026-03-21 20:49:31,166 - PerformanceAnalysisLogs - INFO -   N= 10000  B+Tree (d=640) peak_mem=3.0325MB
+2026-03-21 20:49:31,167 - PerformanceAnalysisLogs - INFO - Saved to C:\Users\GSRAJA\Desktop\IIT GN\sem6\databases\Assignments\Assignment-2\Module_A\benchmarking_results

@@ -2,3 +2,10 @@
 venv/
 *.idea
 *.pyc
+tmp
+*__pycache__*
+Assignment-2/Module_A/benchmarking/*
+*.idea
+.venv
+venv
+Video/
