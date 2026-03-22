@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 import logging
+import math
 from typing import Any
 
 import requests
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -86,6 +87,34 @@ def _fallback_update_distances(bookings: list[Booking]) -> int:
         )
         updated += 1
     return updated
+
+
+def calculate_booking_distance_km(pickup_geohash: str, drop_geohash: str) -> Decimal:
+    pickup_lat, pickup_lon = _decode_geohash(pickup_geohash)
+    drop_lat, drop_lon = _decode_geohash(drop_geohash)
+
+    if pickup_geohash.strip().lower() == drop_geohash.strip().lower():
+        raise ValueError("Pickup and drop geohash cannot be the same")
+
+    try:
+        distance_km = _osrm_distance_km(pickup_lat, pickup_lon, drop_lat, drop_lon)
+    except Exception as exc:
+        logger.warning("routing.osrm_direct_failed error=%s", exc)
+        # Haversine fallback when OSRM is unavailable.
+        lat1 = math.radians(pickup_lat)
+        lon1 = math.radians(pickup_lon)
+        lat2 = math.radians(drop_lat)
+        lon2 = math.radians(drop_lon)
+        d_lat = lat2 - lat1
+        d_lon = lon2 - lon1
+        a = math.sin(d_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(d_lon / 2) ** 2
+        c = 2 * math.asin(min(1.0, math.sqrt(a)))
+        distance_km = Decimal(str(6371.0 * c))
+
+    quantized = distance_km.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if quantized <= Decimal("0"):
+        raise ValueError("Distance must be greater than 0")
+    return quantized
 
 
 def recalculate_ride_route_and_distances(ride: Ride, db: Session) -> int:

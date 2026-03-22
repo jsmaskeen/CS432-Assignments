@@ -1,5 +1,4 @@
 import logging
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -8,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
 from core.audit import audit_event
-from core.routing import recalculate_ride_route_and_distances
+from core.routing import calculate_booking_distance_km, recalculate_ride_route_and_distances
 from db.session import get_db_session
 from models.booking import Booking
 from models.member import Member
@@ -68,13 +67,51 @@ def create_booking(
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already booked this ride")
 
+    try:
+        booking_distance_km = calculate_booking_distance_km(
+            payload.pickup_geohash,
+            payload.drop_geohash,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "bookings.create.invalid_distance ride_id=%s member_id=%s reason=%s",
+            ride_id,
+            current_member.MemberID,
+            exc,
+        )
+        audit_event(
+            action="bookings.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "invalid_distance", "ride_id": ride_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "bookings.create.distance_calc_failed ride_id=%s member_id=%s",
+            ride_id,
+            current_member.MemberID,
+        )
+        audit_event(
+            action="bookings.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "distance_calculation_failed", "ride_id": ride_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not calculate booking distance right now",
+        ) from exc
+
     booking = Booking(
         RideID=ride_id,
         Passenger_MemberID=current_member.MemberID,
         Booking_Status="Pending",
         Pickup_GeoHash=payload.pickup_geohash,
         Drop_GeoHash=payload.drop_geohash,
-        Distance_Travelled_KM=Decimal("0.01"),
+        Distance_Travelled_KM=booking_distance_km,
     )
     db.add(booking)
 
