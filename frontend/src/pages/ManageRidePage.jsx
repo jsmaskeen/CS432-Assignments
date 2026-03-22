@@ -24,6 +24,8 @@ export default function ManageRidePage() {
 	const [showNewRoute, setShowNewRoute] = useState(true);
 	const [confirmedBookings, setConfirmedBookings] = useState([]);
 	const [confirmedStops, setConfirmedStops] = useState([]);
+	const [settlementByBooking, setSettlementByBooking] = useState({});
+	const [settlementsLoading, setSettlementsLoading] = useState(false);
 	const [message, setMessage] = useState("");
 	const [actionLoading, setActionLoading] = useState(false);
 
@@ -75,8 +77,7 @@ export default function ManageRidePage() {
 			try {
 				const data = await api.getRide(rideId);
 				setRide(data);
-				const filled =
-					Number(data?.Max_Capacity ?? 0) - Number(data?.Available_Seats ?? 0);
+				const filled = Number(data?.Max_Capacity ?? 0) - Number(data?.Available_Seats ?? 0);
 				setForm({
 					vehicle_type: data?.Vehicle_Type || "",
 					max_capacity: String(data?.Max_Capacity ?? ""),
@@ -144,6 +145,52 @@ export default function ManageRidePage() {
 			cancelled = true;
 		};
 	}, [rideId]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadSettlementsForConfirmed() {
+			if (!confirmedBookings.length) {
+				setSettlementByBooking({});
+				setSettlementsLoading(false);
+				return;
+			}
+
+			setSettlementsLoading(true);
+			try {
+				const entries = await Promise.all(
+					confirmedBookings.map(async booking => {
+						try {
+							const settlement = await api.getBookingSettlement(booking.BookingID);
+							return [booking.BookingID, settlement || null];
+						} catch {
+							return [booking.BookingID, null];
+						}
+					}),
+				);
+
+				if (cancelled) {
+					return;
+				}
+
+				const next = entries.reduce((acc, [bookingId, settlement]) => {
+					acc[bookingId] = settlement;
+					return acc;
+				}, {});
+				setSettlementByBooking(next);
+			} finally {
+				if (!cancelled) {
+					setSettlementsLoading(false);
+				}
+			}
+		}
+
+		loadSettlementsForConfirmed();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [confirmedBookings]);
 
 	async function handleSubmit(event) {
 		event.preventDefault();
@@ -268,15 +315,43 @@ export default function ManageRidePage() {
 		}
 	}
 
+	async function refreshSettlements() {
+		if (!confirmedBookings.length) {
+			setSettlementByBooking({});
+			return;
+		}
+		setSettlementsLoading(true);
+		try {
+			const entries = await Promise.all(
+				confirmedBookings.map(async booking => {
+					try {
+						const settlement = await api.getBookingSettlement(booking.BookingID);
+						return [booking.BookingID, settlement || null];
+					} catch {
+						return [booking.BookingID, null];
+					}
+				}),
+			);
+			const next = entries.reduce((acc, [bookingId, settlement]) => {
+				acc[bookingId] = settlement;
+				return acc;
+			}, {});
+			setSettlementByBooking(next);
+			setMessage("Settlements refreshed");
+		} catch {
+			setMessage("Failed to refresh settlements");
+		} finally {
+			setSettlementsLoading(false);
+		}
+	}
+
 	return (
 		<div className="page">
 			<section className="card panel">
 				<div className="section-title">
 					<div>
 						<h2>Manage Ride #{rideId}</h2>
-						<p className="message">
-							Update vehicle type, max seats, and filled seats.
-						</p>
+						<p className="message">Update vehicle type, max seats, and filled seats.</p>
 					</div>
 					<div className="chip-row">
 						<Link to="/bookings" className="btn ghost">
@@ -298,7 +373,7 @@ export default function ManageRidePage() {
 							}
 							disabled={
 								actionLoading ||
-								(!["Open", "Full", "Started"].includes(ride.Ride_Status))
+								!["Open", "Full", "Started"].includes(ride.Ride_Status)
 							}
 						>
 							{ride.Ride_Status === "Started" ? "End ride" : "Start ride"}
@@ -345,9 +420,7 @@ export default function ManageRidePage() {
 						/>
 					</label>
 					{ride ? (
-						<p className="message">
-							Current available seats: {ride.Available_Seats}
-						</p>
+						<p className="message">Current available seats: {ride.Available_Seats}</p>
 					) : null}
 					<button className="btn primary" type="submit">
 						Save changes
@@ -364,15 +437,63 @@ export default function ManageRidePage() {
 						<li key={`confirmed-${booking.BookingID}`}>
 							<strong>Booking #{booking.BookingID}</strong>
 							<span>
-								Rider {booking.Passenger_Name || "Unknown"} • Rating {booking.Passenger_Rating ?? "-"}
+								Rider {booking.Passenger_Name || "Unknown"} • Rating{" "}
+								{booking.Passenger_Rating ?? "-"}
 							</span>
 							<span>
 								Pickup {booking.Pickup_GeoHash} → Drop {booking.Drop_GeoHash}
 							</span>
 						</li>
 					))}
-					{confirmedBookings.length === 0 ? (
-						<li>No confirmed bookings yet.</li>
+					{confirmedBookings.length === 0 ? <li>No confirmed bookings yet.</li> : null}
+				</ul>
+			</section>
+			<section className="card panel">
+				<div className="section-title">
+					<h3>Settlements</h3>
+					<div className="chip-row">
+						<span className="pill">{confirmedBookings.length} bookings</span>
+						<button
+							className="btn ghost"
+							type="button"
+							onClick={refreshSettlements}
+							disabled={settlementsLoading}
+						>
+							{settlementsLoading ? "Refreshing..." : "Refresh"}
+						</button>
+					</div>
+				</div>
+				{settlementsLoading ? <p className="message">Loading settlements...</p> : null}
+				<ul className="booking-list">
+					{confirmedBookings.map(booking => {
+						const settlement = settlementByBooking[booking.BookingID] || null;
+						const status = settlement?.Payment_Status || "NotGenerated";
+						const isSettled = status === "Settled";
+						return (
+							<li key={`settlement-${booking.BookingID}`}>
+								<strong>Booking #{booking.BookingID}</strong>
+								<span>
+									Rider {booking.Passenger_Name || "Unknown"} • Status{" "}
+									{booking.Booking_Status}
+								</span>
+								<span>
+									Settlement:{" "}
+									{status === "NotGenerated" ? "Not generated yet" : status}
+								</span>
+								{settlement ? (
+									<span>
+										Amount: ₹
+										{Number(settlement.Calculated_Cost || 0).toFixed(2)}
+									</span>
+								) : null}
+								<span className={`pill ${isSettled ? "success" : "warn"}`}>
+									{isSettled ? "Settled" : "Unpaid / Pending"}
+								</span>
+							</li>
+						);
+					})}
+					{!settlementsLoading && confirmedBookings.length === 0 ? (
+						<li>No confirmed bookings to settle yet.</li>
 					) : null}
 				</ul>
 			</section>
@@ -387,7 +508,8 @@ export default function ManageRidePage() {
 						<li key={pending.BookingID}>
 							<strong>Booking #{pending.BookingID}</strong>
 							<span>
-								Rider {pending.Passenger_Name || "Unknown"} • Rating {pending.Passenger_Rating ?? "-"}
+								Rider {pending.Passenger_Name || "Unknown"} • Rating{" "}
+								{pending.Passenger_Rating ?? "-"}
 							</span>
 							<span>
 								Pickup {pending.Pickup_GeoHash} → Drop {pending.Drop_GeoHash}
@@ -429,7 +551,8 @@ export default function ManageRidePage() {
 							<div>
 								<h3>Pending booking #{selectedPending.BookingID}</h3>
 								<p className="message">
-									Pickup {selectedPending.Pickup_GeoHash} → Drop {selectedPending.Drop_GeoHash}
+									Pickup {selectedPending.Pickup_GeoHash} → Drop{" "}
+									{selectedPending.Drop_GeoHash}
 								</p>
 							</div>
 							<button
@@ -470,7 +593,9 @@ export default function ManageRidePage() {
 									<Marker position={pendingRoutePath[0]} />
 								) : null}
 								{pendingRoutePath.length > 0 ? (
-									<Marker position={pendingRoutePath[pendingRoutePath.length - 1]} />
+									<Marker
+										position={pendingRoutePath[pendingRoutePath.length - 1]}
+									/>
 								) : null}
 							</MapContainer>
 						) : (
@@ -497,13 +622,17 @@ export default function ManageRidePage() {
 						<div className="chip-row" style={{ marginTop: 12 }}>
 							<button
 								className="btn primary"
-								onClick={() => handlePendingAction(selectedPending.BookingID, "accept")}
+								onClick={() =>
+									handlePendingAction(selectedPending.BookingID, "accept")
+								}
 							>
 								Accept booking
 							</button>
 							<button
 								className="btn ghost"
-								onClick={() => handlePendingAction(selectedPending.BookingID, "reject")}
+								onClick={() =>
+									handlePendingAction(selectedPending.BookingID, "reject")
+								}
 							>
 								Reject booking
 							</button>
