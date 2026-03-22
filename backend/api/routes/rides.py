@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
+from core.routing import calculate_booking_distance_km
 from db.session import get_db_session
 from models.booking import Booking
 from models.auth_credential import AuthCredential
@@ -16,7 +17,7 @@ from models.chat_message import RideChatMessage
 from models.member import Member
 from models.ride import Ride
 from models.settlement import CostSettlement
-from schemas.ride import BookingReadResponse, RideCreateRequest, RideReadResponse, RideUpdateRequest, RideWithBookingsResponse
+from schemas.ride import RideCreateRequest, RideReadResponse, RideUpdateRequest, RideWithBookingsResponse
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 logger = logging.getLogger("rajak.rides")
@@ -70,6 +71,39 @@ def create_ride(
     if available_seats < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Max capacity must be at least 1")
 
+    try:
+        host_booking_distance = calculate_booking_distance_km(
+            payload.start_geohash,
+            payload.end_geohash,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "rides.create.invalid_host_distance host_member_id=%s reason=%s",
+            current_member.MemberID,
+            exc,
+        )
+        audit_event(
+            action="rides.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "invalid_host_distance", "error": str(exc)},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("rides.create.host_distance_calc_failed host_member_id=%s", current_member.MemberID)
+        audit_event(
+            action="rides.create",
+            status="failed",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"reason": "host_distance_calculation_failed"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not calculate host booking distance right now",
+        ) from exc
+
     ride = Ride(
         Host_MemberID=current_member.MemberID,
         Start_GeoHash=payload.start_geohash,
@@ -90,7 +124,7 @@ def create_ride(
         Booking_Status="Confirmed",
         Pickup_GeoHash=ride.Start_GeoHash,
         Drop_GeoHash=ride.End_GeoHash,
-        Distance_Travelled_KM=Decimal("0.01"),
+        Distance_Travelled_KM=host_booking_distance,
     )
     host_participant = RideParticipant(
         RideID=ride.RideID,
