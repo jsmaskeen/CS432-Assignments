@@ -4,6 +4,7 @@ Cab sharing portal made for students of IIT Gandhinagar, developed across four a
 
 ## To Run
 
+First navigate to `Assignment-2/Module_B`
 ### Manual (backend + frontend)
 
 ```
@@ -49,13 +50,6 @@ This script installs backend/frontend dependencies (if needed) and starts both d
         - `frontend/`: React + Vite application (UI pages for rides, bookings, chat, admin, settlements, locations, etc.).
         - `INITIALISE_DB.sql`: database bootstrap SQL for creating/initializing core schema/data and triggers.
         - `backend/audit.log`: application level log file showing all the transactions from the app to the db.
-        - `audit_modifications_log_table.json`: Data from the MySQL Logging table watching all the modifications in important tables.
-        - `unauthorized_modifications_view.json`: Data from the MySQL View on the above table, which shows only the unauthorized modification entries, by checking the flag `is_authorized`.
+        - `logs/audit_modifications_log_table.json`: Data from the MySQL Logging table watching all the modifications in important tables.
+        - `logs/unauthorized_modifications_view.json`: Data from the MySQL View on the above table, which shows only the unauthorized modification entries, by checking the flag `is_authorized`.
 
-### Group Details:
-
-1. Aarsh Wankar (23110003)
-2. Abhinav Khot (23110006)
-3. Jaskirat Singh Maskeen (23110146)
-4. Karan Sagar Gandhi (23110157)
-5. Romit Mohane (23110279)
