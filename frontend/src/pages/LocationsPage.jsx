@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import geohash from "ngeohash";
-import { MapContainer, TileLayer, CircleMarker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from "react-leaflet";
 
 import { api } from "../api";
 
@@ -76,6 +76,33 @@ function MapClickCapture({ onPick }) {
 	return null;
 }
 
+function MapViewportController({ target }) {
+	const map = useMap();
+	const lastTargetRef = useRef(null);
+
+	useEffect(() => {
+		if (!target || target.length !== 2) {
+			return;
+		}
+
+		const [lat, lng] = target;
+		if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+			return;
+		}
+
+		const nextKey = `${lat.toFixed(5)}:${lng.toFixed(5)}`;
+		if (lastTargetRef.current === nextKey) {
+			return;
+		}
+
+		lastTargetRef.current = nextKey;
+		const nextZoom = Math.max(map.getZoom(), 13);
+		map.flyTo([lat, lng], nextZoom, { duration: 0.55 });
+	}, [map, target]);
+
+	return null;
+}
+
 export default function LocationsPage() {
 	const [search, setSearch] = useState("");
 	const [locationType, setLocationType] = useState("");
@@ -89,8 +116,26 @@ export default function LocationsPage() {
 	const [message, setMessage] = useState("");
 
 	const pickedPoint = useMemo(() => decodeGeohash(createForm.geohash), [createForm.geohash]);
+	const mapTargetPoint = useMemo(() => {
+		if (pickedPoint) {
+			return pickedPoint;
+		}
 
-	const mapCenter = pickedPoint || [23.2156, 72.6369];
+		const typedGeohashPoint = decodeGeohash(createSearch.trim());
+		if (typedGeohashPoint) {
+			return typedGeohashPoint;
+		}
+
+		const topSuggestionGeohash = createSuggestions?.[0]?.geohash;
+		const topSuggestionPoint = topSuggestionGeohash
+			? decodeGeohash(topSuggestionGeohash)
+			: null;
+		if (topSuggestionPoint) {
+			return topSuggestionPoint;
+		}
+
+		return [23.2156, 72.6369];
+	}, [pickedPoint, createSearch, createSuggestions]);
 
 	async function loadLocations() {
 		try {
@@ -289,17 +334,18 @@ export default function LocationsPage() {
 				<div style={{ marginTop: 12 }}>
 					<p className="message">Click map to set geohash</p>
 					<MapContainer
-						center={mapCenter}
+						center={mapTargetPoint}
 						zoom={12}
 						style={{ height: 300, borderRadius: 12, overflow: "hidden" }}
 					>
 						<TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+						<MapViewportController target={mapTargetPoint} />
 						<MapClickCapture onPick={handleMapPick} />
-						{pickedPoint ? (
+						{mapTargetPoint ? (
 							<CircleMarker
-								center={pickedPoint}
+								center={mapTargetPoint}
 								radius={8}
-								pathOptions={{ color: "#0beb87" }}
+								pathOptions={{ color: pickedPoint ? "#0beb87" : "#65a4ff" }}
 							/>
 						) : null}
 					</MapContainer>
