@@ -1,0 +1,1 @@
+mysql -u aarsh -pAarsh_Local_Db\!2026 -D cabSharing < SQL-Dump/dump.sql && mysql -u aarsh -pAarsh_Local_Db\!2026 -D cabSharing -e "SET FOREIGN_KEY_CHECKS=0; TRUNCATE TABLE Auth_Credentials; SET FOREIGN_KEY_CHECKS=1;"
