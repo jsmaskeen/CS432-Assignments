@@ -48,6 +48,9 @@ This script installs backend/frontend dependencies (if needed) and starts both d
         - `backend/`: FastAPI application (API routes, models, schemas, DB session management, auth, audit/routing helpers).
         - `frontend/`: React + Vite application (UI pages for rides, bookings, chat, admin, settlements, locations, etc.).
         - `INITIALISE_DB.sql`: database bootstrap SQL for creating/initializing core schema/data and triggers.
+        - `backend/audit.log`: application level log file showing all the transactions from the app to the db.
+        - `audit_modifications_log_table.json`: Data from the MySQL Logging table watching all the modifications in important tables.
+        - `unauthorized_modifications_view.json`: Data from the MySQL View on the above table, which shows only the unauthorized modification entries, by checking the flag `is_authorized`.
 
 ### Group Details:
 

@@ -1,0 +1,72 @@
+[
+	{
+		"log_id" : 39,
+		"table_name" : "Members",
+		"operation" : "UPDATE",
+		"primary_key_name" : "MemberID",
+		"primary_key_value" : "27",
+		"db_user" : "root@localhost",
+		"connection_id" : 55,
+		"source_tag" : "direct_db",
+		"is_authorized" : 0,
+		"created_at" : "2026-03-22 10:55:31",
+		"old_values_json" : "{\"Email\": \"23110279@iitgn.ac.in\", \"Full_Name\": \"Romit Mohane\", \"Reputation_Score\": 0.0}",
+		"new_values_json" : "{\"Email\": \"23110279@iitgn.ac.in\", \"Full_Name\": \"Romit Mohane\", \"Reputation_Score\": 0.0}"
+	},
+	{
+		"log_id" : 25,
+		"table_name" : "Bookings",
+		"operation" : "INSERT",
+		"primary_key_name" : "BookingID",
+		"primary_key_value" : "59",
+		"db_user" : "root@localhost",
+		"connection_id" : 186,
+		"source_tag" : "direct_db",
+		"is_authorized" : 0,
+		"created_at" : "2026-03-22 10:03:40",
+		"old_values_json" : null,
+		"new_values_json" : "{\"RideID\": 29, \"BookingID\": 59, \"Booking_Status\": \"Confirmed\", \"Passenger_MemberID\": 26, \"Distance_Travelled_KM\": 39.10}"
+	},
+	{
+		"log_id" : 20,
+		"table_name" : "Bookings",
+		"operation" : "INSERT",
+		"primary_key_name" : "BookingID",
+		"primary_key_value" : "58",
+		"db_user" : "root@localhost",
+		"connection_id" : 174,
+		"source_tag" : "direct_db",
+		"is_authorized" : 0,
+		"created_at" : "2026-03-22 10:00:22",
+		"old_values_json" : null,
+		"new_values_json" : "{\"RideID\": 28, \"BookingID\": 58, \"Booking_Status\": \"Confirmed\", \"Passenger_MemberID\": 26, \"Distance_Travelled_KM\": 0.01}"
+	},
+	{
+		"log_id" : 5,
+		"table_name" : "Bookings",
+		"operation" : "INSERT",
+		"primary_key_name" : "BookingID",
+		"primary_key_value" : "55",
+		"db_user" : "root@localhost",
+		"connection_id" : 154,
+		"source_tag" : "direct_db",
+		"is_authorized" : 0,
+		"created_at" : "2026-03-22 08:47:59",
+		"old_values_json" : null,
+		"new_values_json" : "{\"RideID\": 27, \"BookingID\": 55, \"Booking_Status\": \"Confirmed\", \"Passenger_MemberID\": 26, \"Distance_Travelled_KM\": 0.01}"
+	},
+	{
+		"log_id" : 1,
+		"table_name" : "Members",
+		"operation" : "UPDATE",
+		"primary_key_name" : "MemberID",
+		"primary_key_value" : "27",
+		"db_user" : "root@localhost",
+		"connection_id" : 55,
+		"source_tag" : "direct_db",
+		"is_authorized" : 0,
+		"created_at" : "2026-03-21 21:41:31",
+		"old_values_json" : "{\"Email\": \"23110279@iitgn.ac.in\", \"Full_Name\": \"Romit Mohane\", \"Reputation_Score\": 0.0}",
+		"new_values_json" : "{\"Email\": \"23110279@iitgn.ac.in\", \"Full_Name\": \"Romit Mohane\", \"Reputation_Score\": 0.0}"
+	}
+]
