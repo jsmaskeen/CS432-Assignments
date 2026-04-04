@@ -133,9 +133,10 @@ class Table(BaseTable):
 
     def insert_row(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
         if tx is None and self.db_manager is not None:
-            if self.db_manager.active_transaction is None:
+            current_tx = self.db_manager.get_current_transaction()
+            if current_tx is None:
                 return self.db_manager.run_autocommit(lambda implicit_tx: self.insert_row(row, tx=implicit_tx))
-            tx = self.db_manager.active_transaction
+            tx = current_tx
 
         with self._table_lock:
             self._run_integrity_checks(row)
@@ -149,9 +150,10 @@ class Table(BaseTable):
         
     def update_row(self, key: int, new_data: Dict[str, Any], tx: Optional["Transaction"] = None):
         if tx is None and self.db_manager is not None:
-            if self.db_manager.active_transaction is None:
+            current_tx = self.db_manager.get_current_transaction()
+            if current_tx is None:
                 return self.db_manager.run_autocommit(lambda implicit_tx: self.update_row(key, new_data, tx=implicit_tx))
-            tx = self.db_manager.active_transaction
+            tx = current_tx
 
         with self._table_lock:
             existing = self.select(key, tx=tx)
@@ -170,9 +172,10 @@ class Table(BaseTable):
     
     def delete_row(self, key: int, tx: Optional["Transaction"] = None):
         if tx is None and self.db_manager is not None:
-            if self.db_manager.active_transaction is None:
+            current_tx = self.db_manager.get_current_transaction()
+            if current_tx is None:
                 return self.db_manager.run_autocommit(lambda implicit_tx: self.delete_row(key, tx=implicit_tx))
-            tx = self.db_manager.active_transaction
+            tx = current_tx
 
         with self._table_lock:
             if not self.db_manager:

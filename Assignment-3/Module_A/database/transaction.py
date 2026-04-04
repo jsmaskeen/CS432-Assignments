@@ -20,10 +20,11 @@ class Transaction_operation:
             "action": self.action,
             "table_name": self.table_name,
             "key": self.key,
-            "row": self.row,
+            "row": deepcopy(self.row),
             "ts": time(),
         }
 
+    @classmethod
     def from_wal_record(cls, record: Dict[str, Any]):
         return cls(
             action=record["action"],
@@ -36,14 +37,22 @@ class Transaction_operation:
 class Transaction:
     _wal_write_lock = Lock()
 
-    def __init__(self, db, wal_path: Optional[str] = None):
+    def __init__(self, db, tx_id: Optional[int] = None, wal_path: Optional[str] = None):
         self.db = db
-        self.tx_id = self.db.next_transaction_id()
+        self.tx_id = tx_id if tx_id is not None else self.db.next_transaction_id()
         self.operations: List[Transaction_operation] = []
         self.staged_rows: Dict[str, Dict[int, Optional[Dict[str, Any]]]] = {}
         self._op_seq = 0
         self._has_logged_begin = False
+        self._closed = False
         self.wal_path = wal_path if wal_path is not None else self._default_wal_path()
+
+    def _ensure_active(self):
+        if self._closed:
+            raise ValueError(f"Transaction {self.tx_id} is no longer active")
+
+    def mark_closed(self):
+        self._closed = True
 
     def _default_wal_path(self):
         wal_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "wal"))
@@ -180,6 +189,7 @@ class Transaction:
         return result
 
     def stage_insert(self, table_name: str, key: int, row: Dict[str, Any]):
+        self._ensure_active()
         self._log_begin_if_needed()
         cur_row = deepcopy(row)
         operation = Transaction_operation("insert", table_name, key, cur_row)
@@ -188,6 +198,7 @@ class Transaction:
         self._log_operation(operation)
 
     def stage_update(self, table_name: str, key: int, row: Dict[str, Any]):
+        self._ensure_active()
         self._log_begin_if_needed()
         cur_row = deepcopy(row)
         operation = Transaction_operation("update", table_name, key, cur_row)
@@ -196,6 +207,7 @@ class Transaction:
         self._log_operation(operation)
 
     def stage_delete(self, table_name: str, key: int):
+        self._ensure_active()
         self._log_begin_if_needed()
         table_rows = self.staged_rows.setdefault(table_name, {})
         if key in table_rows and table_rows[key] is None:
@@ -207,9 +219,11 @@ class Transaction:
         self._log_operation(operation)
 
     def commit(self):
+        self._ensure_active()
         self.db.commit_transaction(self)
 
     def rollback(self):
+        self._ensure_active()
         self.db.rollback_transaction(self)
         
     def __enter__(self):
