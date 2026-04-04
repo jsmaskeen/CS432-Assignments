@@ -13,10 +13,11 @@ spec.loader.exec_module(assn2_table)
 
 BaseTable = assn2_table.Table
 
+from .db_manager import Database
 from typing import List, Dict, Any, Optional
 
 class Table(BaseTable):
-    def __init__(self, name: str, columns: List[str], primary_key: str, foreign_keys: Optional[List[Dict[str, Any]]] = None, db_manager=None, **kwargs):
+    def __init__(self, name: str, columns: List[str], primary_key: str, foreign_keys: Optional[List[Dict[str, Any]]] = None, db_manager: Database=None, **kwargs):
         super().__init__(name, columns, primary_key, **kwargs)
         self.foreign_keys = foreign_keys if foreign_keys else []
         self.db_manager = db_manager
@@ -35,10 +36,15 @@ class Table(BaseTable):
                 raise ValueError(f"Foreign key constraint failed: value {foreign_key_value} not found in {fk['references_table']}({fk['references_column']})")
 
     def insert_row(self, row: Dict[str, Any]):
+        if self.db_manager.in_transaction:
+            self.db_manager.insert_tx_opt(self.name, "insert", row)
         self._check_foreign_key(row)
         super().insert_row(row)
 
     def update_row(self, key: int, new_data: Dict[str, Any]):
+        if self.db_manager.in_transaction:
+            self.db_manager.insert_tx_opt(self.name, "update", {"key": key, "new_data": new_data})
+        
         existing = self.select(key)
         if not existing:
             return False
@@ -48,6 +54,9 @@ class Table(BaseTable):
         return super().update_row(key, new_data)
 
     def delete_row(self, key: int):
+        if self.db_manager.in_transaction:
+            self.db_manager.insert_tx_opt(self.name, "delete", {"key": key})
+        
         if not self.db_manager:
             return super().delete_row(key)
 
@@ -68,4 +77,3 @@ class Table(BaseTable):
                             table.delete_row(k)
         
         return super().delete_row(key)
-

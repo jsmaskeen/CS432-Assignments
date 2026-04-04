@@ -14,10 +14,16 @@ spec.loader.exec_module(assn2_db_manager)
 BaseDatabase = assn2_db_manager.Database
 BaseDatabaseManager = assn2_db_manager.DatabaseManager
 
+from .transaction import Transaction
 from .table import Table
 from typing import List, Dict, Any, Literal, Optional
 
 class Database(BaseDatabase):
+    def __init__(self):
+        super().__init__()
+        self.in_transaction = False
+        self.current_transaction = None
+    
     def create_table(
         self,
         name: str,
@@ -40,6 +46,29 @@ class Database(BaseDatabase):
             db_manager=self 
         )
         return self.tables[name]
+    
+    def begin_transaction(self):
+        if self.in_transaction:
+            raise RuntimeError("Transaction already in progress")
+        self.in_transaction = True
+        self.current_transaction = Transaction(self)
+        
+    def commit_transaction(self):
+        if not self.in_transaction:
+            raise RuntimeError("No transaction in progress")
+        self.current_transaction.commit()
+        self.in_transaction = False
+        
+    def rollback_transaction(self):
+        if not self.in_transaction:
+            raise RuntimeError("No transaction in progress")
+        self.current_transaction.rollback()
+        self.in_transaction = False
+        
+    def insert_tx_opt(self, table_name: str, operation: str, data: Dict[str, Any]):
+        if not self.in_transaction:
+            raise RuntimeError("No transaction in progress")
+        self.current_transaction.log_operation(table_name, operation, data)
 
 class DatabaseManager(BaseDatabaseManager):
     def create_database(self, db_name: str):
