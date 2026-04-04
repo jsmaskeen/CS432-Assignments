@@ -1,74 +1,70 @@
-from .db_manager import Database
-from typing import Dict, Any, List
+from copy import deepcopy
+from typing import Any, Dict, List, Literal, Optional
 
-class Transaction_Log_entry:
-	def __init__(self, table_name: str, operation: str, data: Dict[str, Any]):
-		self.table_name = table_name
-		self.operation = operation
-		self.data = data
-		self.previous_state = None 
-  
-	def set_previous_state(self, state: Dict[str, Any]):
-		self.previous_state = state
-  
-	def apply(self, db: Database):
-		table = db.get_table(self.table_name)
-		try:
-			if self.operation == "insert":
-				table.insert_row(self.data)
-			elif self.operation == "update":
-				key = self.data["key"]
-				new_data = self.data["new_data"]
-				existing = table.select(key)
-				if existing:
-					self.set_previous_state(existing)
-					table.update_row(key, new_data)
-				else:
-					print(f"Error: Attempting to update non-existent key {key} in table {self.table_name}")
-					return False
-			elif self.operation == "delete":
-				key = self.data["key"]
-				existing = table.select(key)
-				if existing:
-					self.set_previous_state(existing)
-					table.delete_row(key)
-				else:
-					print(f"Error: Attempting to delete non-existent key {key} from table {self.table_name}")
-					return False
-			return True
-		except Exception as e:
-			print(f"Error applying operation {self.operation} on table {self.table_name}: {e}")
-			return False
-	
-	def rollback(self, db: Database):
-		if self.previous_state is None:
-			return
-		table = db.get_table(self.table_name)
-		if self.operation == "insert":
-			table.delete_row(self.data[table.primary_key])
-		elif self.operation == "update":
-			key = self.data["key"]
-			table.update_row(key, self.previous_state)
-		elif self.operation == "delete":
-			table.insert_row(self.previous_state)
+class Transaction_operation:
+    def __init__(self, action: Literal["insert", "update", "delete"], table_name: str, key: int, row: Optional[Dict[str, Any]] = None):
+        self.action = action
+        self.table_name = table_name
+        self.key = key
+        self.row = row
+
 
 class Transaction:
-	def __init__(self, db: Database):
-		self.db: Database = db
-		self.operations: List[Transaction_Log_entry] = []
+    def __init__(self, db):
+        self.db = db
+        self.operations: List[Transaction_operation] = []
+        self.staged_rows: Dict[str, Dict[int, Optional[Dict[str, Any]]]] = {}
 
-	def log_operation(self, table_name: str, operation: str, data: Dict[str, Any]):
-		self.operations.append(Transaction_Log_entry(table_name, operation, data))
-	
-	def commit(self):
-		for op in self.operations:
-			if not op.apply(self.db):
-				self.rollback()
-				print("Transaction failed and rolled back")
-				return
-		self.operations.clear()
-	
-	def rollback(self):
-		for op in reversed(self.operations):
-			op.rollback(self.db)
-		self.operations.clear()
+    def staged_lookup(self, table_name: str, key: int):
+        table_rows = self.staged_rows.get(table_name)
+        if table_rows is None or key not in table_rows:
+            return False, None
+
+        row = table_rows[key]
+        if row is None:
+            return True, None
+
+        return True, deepcopy(row)
+
+    def staged_rows_for_table(self, table_name: str):
+        table_rows = self.staged_rows.get(table_name, {})
+        result: Dict[int, Optional[Dict[str, Any]]] = {}
+
+        for key, row in table_rows.items():
+            result[key] = None if row is None else deepcopy(row)
+
+        return result
+
+    def stage_insert(self, table_name: str, key: int, row: Dict[str, Any]):
+        cur_row = deepcopy(row)
+        self.operations.append(Transaction_operation("insert", table_name, key, cur_row))
+        self.staged_rows.setdefault(table_name, {})[key] = cur_row
+
+    def stage_update(self, table_name: str, key: int, row: Dict[str, Any]):
+        cur_row = deepcopy(row)
+        self.operations.append(Transaction_operation("update", table_name, key, cur_row))
+        self.staged_rows.setdefault(table_name, {})[key] = cur_row
+
+    def stage_delete(self, table_name: str, key: int):
+        table_rows = self.staged_rows.setdefault(table_name, {})
+        if key in table_rows and table_rows[key] is None:
+            return
+
+        self.operations.append(Transaction_operation("delete", table_name, key, None))
+        table_rows[key] = None
+
+    def commit(self):
+        self.db.commit_transaction(self)
+
+    def rollback(self):
+        self.db.rollback_transaction(self)
+        
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            self.commit()
+        else:
+            self.rollback()
+        return False

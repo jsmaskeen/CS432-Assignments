@@ -13,16 +13,19 @@ spec.loader.exec_module(assn2_table)
 
 BaseTable = assn2_table.Table
 
-from .db_manager import Database
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .db_manager import Database
+    from .transaction import Transaction
 
 class Table(BaseTable):
-    def __init__(self, name: str, columns: List[str], primary_key: str, foreign_keys: Optional[List[Dict[str, Any]]] = None, db_manager: Database=None, **kwargs):
+    def __init__(self, name: str, columns: List[str], primary_key: str, foreign_keys: Optional[List[Dict[str, Any]]] = None, db_manager: "Database" = None, **kwargs):
         super().__init__(name, columns, primary_key, **kwargs)
         self.foreign_keys = foreign_keys if foreign_keys else []
         self.db_manager = db_manager
 
-    def _check_foreign_key(self, row: Dict[str, Any]):
+    def _check_foreign_key(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
         if not self.db_manager:
             return 
 
@@ -32,39 +35,76 @@ class Table(BaseTable):
                 continue
 
             referenced_table = self.db_manager.get_table(fk['references_table'])
-            if referenced_table.select(foreign_key_value) is None:
+            if referenced_table.select(foreign_key_value, tx=tx) is None:      
                 raise ValueError(f"Foreign key constraint failed: value {foreign_key_value} not found in {fk['references_table']}({fk['references_column']})")
+            
+    def select(self, key: int, tx: Optional["Transaction"] = None):
+        if tx is not None:
+            found, staged_row = tx.staged_lookup(self.name, key)
+            if found:
+                return staged_row
+        return super().select(key)
 
-    def insert_row(self, row: Dict[str, Any]):
-        if self.db_manager.in_transaction:
-            self.db_manager.insert_tx_opt(self.name, "insert", row)
-        self._check_foreign_key(row)
-        super().insert_row(row)
+    def select_all(self, tx: Optional["Transaction"] = None):
+        if tx is None:
+            return super().select_all()
 
-    def update_row(self, key: int, new_data: Dict[str, Any]):
-        if self.db_manager.in_transaction:
-            self.db_manager.insert_tx_opt(self.name, "update", {"key": key, "new_data": new_data})
+        merged_rows = {row[self.primary_key]: row for row in super().select_all()}
+        for key, row in tx.staged_rows_for_table(self.name).items():
+            if row is None:
+                merged_rows.pop(key, None)
+            else:
+                merged_rows[key] = row
+
+        return [merged_rows[key] for key in sorted(merged_rows.keys())]
+
+    def select_range(self, start_key: int, end_key: int, tx: Optional["Transaction"] = None):
+        if tx is None:
+            return super().select_range(start_key, end_key)
+
+        rows = [
+            row
+            for row in self.select_all(tx=tx)
+            if start_key <= row[self.primary_key] <= end_key
+        ]
+        rows.sort(key=lambda row: row[self.primary_key])
+        return rows
+
+    def insert_row(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
+        self._check_foreign_key(row, tx=tx)
+
+        if tx is None:
+            super().insert_row(row)
+            return
+
+        tx.stage_insert(self.name, row[self.primary_key], row)
         
-        existing = self.select(key)
+    def update_row(self, key: int, new_data: Dict[str, Any], tx: Optional["Transaction"] = None):
+        existing = self.select(key, tx=tx)
         if not existing:
             return False
-        
-        updated_row = {**existing, **new_data}
-        self._check_foreign_key(updated_row)
-        return super().update_row(key, new_data)
 
-    def delete_row(self, key: int):
-        if self.db_manager.in_transaction:
-            self.db_manager.insert_tx_opt(self.name, "delete", {"key": key})
-        
+        updated_row = {**existing, **new_data}
+        self._check_foreign_key(updated_row, tx=tx)
+
+        if tx is None:
+            return super().update_row(key, new_data)
+
+        tx.stage_update(self.name, key, updated_row)
+        return True
+    
+    def delete_row(self, key: int, tx: Optional["Transaction"] = None):
         if not self.db_manager:
-            return super().delete_row(key)
+            if tx is None:
+                return super().delete_row(key)
+            tx.stage_delete(self.name, key)
+            return True
 
         for table in self.db_manager.tables.values():
             if table.foreign_keys:
                 for fk in table.foreign_keys:
                     if fk['references_table'] == self.name:
-                        all_rows = table.select_all()
+                        all_rows = table.select_all(tx=tx)
                         keys_to_delete = []
                         for row in all_rows:
                             if row.get(fk['column']) == key:
@@ -74,6 +114,10 @@ class Table(BaseTable):
                                     raise ValueError(f"Cannot delete row with key {key} from table {self.name} because it is referenced by table {table.name}")
                         
                         for k in keys_to_delete:
-                            table.delete_row(k)
-        
-        return super().delete_row(key)
+                            table.delete_row(k, tx=tx)
+
+        if tx is None:
+            return super().delete_row(key)
+
+        tx.stage_delete(self.name, key)
+        return True
