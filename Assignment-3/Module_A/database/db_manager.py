@@ -49,6 +49,7 @@ class Database(BaseDatabase):
         indexer: Literal["brute", "bplus"] = "bplus",
         degree: int = 4,
         foreign_keys: Optional[List[Dict[str, Any]]] = None,
+        integrity_checks: Optional[List[Dict[str, Any]]] = None,
     ):
         if name in self.tables:
             raise ValueError(f"Table '{name}' already exists")
@@ -60,6 +61,7 @@ class Database(BaseDatabase):
             indexer=indexer,
             degree=degree,
             foreign_keys=foreign_keys,
+            integrity_checks=integrity_checks,
             db_manager=self 
         )
 

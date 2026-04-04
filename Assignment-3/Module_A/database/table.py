@@ -21,11 +21,52 @@ if TYPE_CHECKING:
     from .transaction import Transaction
 
 class Table(BaseTable):
-    def __init__(self, name: str, columns: List[str], primary_key: str, foreign_keys: Optional[List[Dict[str, Any]]] = None, db_manager: "Database" = None, **kwargs):
+    def __init__(
+        self,
+        name: str,
+        columns: List[str],
+        primary_key: str,
+        foreign_keys: Optional[List[Dict[str, Any]]] = None,
+        integrity_checks: Optional[List[Dict[str, Any]]] = None,
+        db_manager: "Database" = None,
+        **kwargs,
+    ):
         super().__init__(name, columns, primary_key, **kwargs)
         self.foreign_keys = foreign_keys if foreign_keys else []
+        self.integrity_checks = integrity_checks if integrity_checks else []
         self.db_manager = db_manager
         self._table_lock = RLock()
+        self._validate_integrity_checks()
+
+    def _validate_integrity_checks(self):
+        for check in self.integrity_checks:
+            column = check.get("column")
+            if column not in self.columns:
+                raise ValueError(f"Integrity check column '{column}' does not exist in table {self.name}")
+
+            if "check" in check and not callable(check["check"]):
+                raise ValueError(f"Integrity CHECK for column '{column}' must be callable")
+
+    def _run_integrity_checks(self, row: Dict[str, Any]):
+        for check in self.integrity_checks:
+            column = check["column"]
+            value = row.get(column)
+
+            if check.get("not_null") and value is None:
+                raise ValueError(f"NOT NULL constraint failed: {self.name}.{column}")
+
+            predicate = check.get("check")
+            if predicate is None:
+                continue
+
+            try:
+                is_valid = predicate(value, row)
+            except TypeError:
+                is_valid = predicate(value)
+
+            if not is_valid:
+                message = check.get("message") or f"CHECK constraint failed: {self.name}.{column}"
+                raise ValueError(message)
 
     def acquire_table_lock(self, blocking: bool = True, timeout: float = -1):
         return self._table_lock.acquire(blocking, timeout)
@@ -97,6 +138,7 @@ class Table(BaseTable):
             tx = self.db_manager.active_transaction
 
         with self._table_lock:
+            self._run_integrity_checks(row)
             self._check_foreign_key(row, tx=tx)
 
             if tx is None:
@@ -117,6 +159,7 @@ class Table(BaseTable):
                 return False
 
             updated_row = {**existing, **new_data}
+            self._run_integrity_checks(updated_row)
             self._check_foreign_key(updated_row, tx=tx)
 
             if tx is None:
