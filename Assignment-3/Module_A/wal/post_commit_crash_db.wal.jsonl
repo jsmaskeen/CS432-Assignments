@@ -1,0 +1,2 @@
+{"action":"CREATE_TABLE","columns":["MemberID","OAUTH_TOKEN","Email","Full_Name","Reputation_Score","Phone_Number","Created_At","Gender"],"degree":4,"foreign_keys":null,"indexer":"bplus","name":"Members","primary_key":"MemberID","ts":1775344296.0175974,"type":"DDL"}
+{"action":"CREATE_TABLE","columns":["MemberID","OAUTH_TOKEN","Email","Full_Name","Reputation_Score","Phone_Number","Created_At","Gender"],"degree":4,"foreign_keys":null,"indexer":"bplus","name":"Members","primary_key":"MemberID","ts":1775344304.6179817,"type":"DDL"}

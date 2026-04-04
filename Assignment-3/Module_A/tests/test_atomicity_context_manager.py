@@ -1,57 +1,252 @@
 import os
+import signal
+import subprocess
 import sys
+import tempfile
 import unittest
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
 
 from database.db_manager import DatabaseManager
+from database.transaction import Transaction
 
 
 class TestAtomicityWithContextManager(unittest.TestCase):
     def setUp(self):
         self.db_manager = DatabaseManager()
-        self.db = self.db_manager.create_database("test_atomicity_db")
+        self.db = self.db_manager.create_database("test_integrity_db")
 
         self.db.create_table(
-            name="Accounts",
-            columns=["account_id", "owner", "balance"],
-            primary_key="account_id",
+            name="Members",
+            columns=[
+                "MemberID",
+                "OAUTH_TOKEN",
+                "Email",
+                "Full_Name",
+                "Reputation_Score",
+                "Phone_Number",
+                "Created_At",
+                "Gender",
+            ],
+            primary_key="MemberID",
             integrity_checks=[
-                {"column": "owner", "not_null": True},
-                {"column": "balance", "not_null": True, "check": lambda value: value >= 0, "message": "balance must be >= 0"},
+                {"column": "OAUTH_TOKEN", "not_null": True},
+                {"column": "Email", "not_null": True, "check": lambda value: value.endswith("@iitgn.ac.in")},
+                {"column": "Full_Name", "not_null": True},
+                {"column": "Reputation_Score", "not_null": True, "check": lambda value: 0.0 <= value <= 5.0},
+                {"column": "Gender", "not_null": True, "check": lambda value: value in {"Male", "Female", "Other"}},
             ],
         )
 
-        accounts = self.db.get_table("Accounts")
-        accounts.insert_row({"account_id": 1, "owner": "Alice", "balance": 100})
+        self.db.create_table(
+            name="Rides",
+            columns=[
+                "RideID",
+                "Host_MemberID",
+                "Start_GeoHash",
+                "End_GeoHash",
+                "Departure_Time",
+                "Vehicle_Type",
+                "Max_Capacity",
+                "Available_Seats",
+                "Base_Fare_Per_KM",
+                "Ride_Status",
+                "Created_At",
+            ],
+            primary_key="RideID",
+            foreign_keys=[
+                {
+                    "column": "Host_MemberID",
+                    "references_table": "Members",
+                    "references_column": "MemberID",
+                }
+            ],
+        )
+
+        self.db.create_table(
+            name="Bookings",
+            columns=[
+                "BookingID",
+                "RideID",
+                "Passenger_MemberID",
+                "Booking_Status",
+                "Pickup_GeoHash",
+                "Drop_GeoHash",
+                "Distance_Travelled_KM",
+                "Booked_At",
+            ],
+            primary_key="BookingID",
+            foreign_keys=[
+                {
+                    "column": "RideID",
+                    "references_table": "Rides",
+                    "references_column": "RideID",
+                    "on_delete": "CASCADE",
+                },
+                {
+                    "column": "Passenger_MemberID",
+                    "references_table": "Members",
+                    "references_column": "MemberID",
+                    "on_delete": "CASCADE",
+                },
+            ],
+        )
+
+        members = self.db.get_table("Members")
+        members.insert_row(
+            {
+                "MemberID": 1,
+                "OAUTH_TOKEN": "tok_alice",
+                "Email": "alice@iitgn.ac.in",
+                "Full_Name": "Alice",
+                "Reputation_Score": 4.7,
+                "Phone_Number": "9999999999",
+                "Created_At": "2026-01-01 10:00:00",
+                "Gender": "Female",
+            }
+        )
 
     # Verifies atomic success: all valid statements inside the context manager are committed together.
     def test_context_manager_commits_all_when_no_error(self):
-        accounts = self.db.get_table("Accounts")
+        members = self.db.get_table("Members")
 
         with self.db.begin_transaction() as tx:
-            accounts.insert_row({"account_id": 2, "owner": "Bob", "balance": 80}, tx=tx)
-            accounts.update_row(1, {"balance": 70}, tx=tx)
+            members.insert_row(
+                {
+                    "MemberID": 2,
+                    "OAUTH_TOKEN": "tok_bob",
+                    "Email": "bob@iitgn.ac.in",
+                    "Full_Name": "Bob",
+                    "Reputation_Score": 3.8,
+                    "Phone_Number": "8888888888",
+                    "Created_At": "2026-01-02 11:00:00",
+                    "Gender": "Male",
+                },
+                tx=tx,
+            )
+            members.update_row(1, {"Reputation_Score": 4.9}, tx=tx)
 
-        self.assertEqual(accounts.select(1)["balance"], 70)
-        self.assertIsNotNone(accounts.select(2))
+        self.assertEqual(members.select(1)["Reputation_Score"], 4.9)
+        self.assertIsNotNone(members.select(2))
 
     # Verifies atomic failure: if one statement fails, the context manager rolls back the entire transaction.
     def test_context_manager_rolls_back_all_when_error_occurs(self):
-        accounts = self.db.get_table("Accounts")
+        members = self.db.get_table("Members")
 
         with self.assertRaises(ValueError):
             with self.db.begin_transaction() as tx:
-                accounts.insert_row({"account_id": 3, "owner": "Charlie", "balance": 50}, tx=tx)
-                accounts.update_row(1, {"balance": -10}, tx=tx)
+                members.insert_row(
+                    {
+                        "MemberID": 3,
+                        "OAUTH_TOKEN": "tok_charlie",
+                        "Email": "charlie@iitgn.ac.in",
+                        "Full_Name": "Charlie",
+                        "Reputation_Score": 4.1,
+                        "Phone_Number": "7777777777",
+                        "Created_At": "2026-01-03 12:00:00",
+                        "Gender": "Other",
+                    },
+                    tx=tx,
+                )
+                members.update_row(1, {"Reputation_Score": 9.9}, tx=tx)
 
         # The valid insert above must also be absent because the whole transaction is rolled back.
-        self.assertIsNone(accounts.select(3))
-        self.assertEqual(accounts.select(1)["balance"], 100)
+        self.assertIsNone(members.select(3))
+        self.assertEqual(members.select(1)["Reputation_Score"], 4.7)
+
+    # Verifies crash-like interruption in the middle of a transaction rolls back all staged work.
+    def test_context_manager_rolls_back_all_on_mid_transaction_signal(self):
+        members = self.db.get_table("Members")
+
+        def _signal_handler(_signum, _frame):
+            raise RuntimeError("Simulated mid-transaction signal")
+
+        previous_handler = signal.getsignal(signal.SIGUSR1)
+        signal.signal(signal.SIGUSR1, _signal_handler)
+        try:
+            with self.assertRaises(RuntimeError):
+                with self.db.begin_transaction() as tx:
+                    members.insert_row(
+                        {
+                            "MemberID": 4,
+                            "OAUTH_TOKEN": "tok_signal",
+                            "Email": "signal@iitgn.ac.in",
+                            "Full_Name": "Signal User",
+                            "Reputation_Score": 4.2,
+                            "Phone_Number": "7444444444",
+                            "Created_At": "2026-01-04 13:00:00",
+                            "Gender": "Other",
+                        },
+                        tx=tx,
+                    )
+                    signal.raise_signal(signal.SIGUSR1)
+                    members.update_row(1, {"Reputation_Score": 5.0}, tx=tx)
+        finally:
+            signal.signal(signal.SIGUSR1, previous_handler)
+
+        self.assertIsNone(members.select(4))
+        self.assertEqual(members.select(1)["Reputation_Score"], 4.7)
+
+    # Verifies power-failure style shutdown before commit does not produce any committed WAL operations.
+    def test_power_failure_mid_transaction_has_no_committed_operations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wal_path = os.path.join(temp_dir, "atomicity_power_failure.wal.jsonl")
+
+            crash_script = """
+import os
+import sys
+from database.db_manager import DatabaseManager
+
+wal_path = sys.argv[1]
+db_manager = DatabaseManager()
+db = db_manager.create_database("atomicity_crash_db")
+db.create_table(
+    name="Members",
+    columns=["MemberID", "OAUTH_TOKEN", "Email", "Full_Name", "Reputation_Score", "Phone_Number", "Created_At", "Gender"],
+    primary_key="MemberID",
+    integrity_checks=[
+        {"column": "OAUTH_TOKEN", "not_null": True},
+        {"column": "Email", "not_null": True, "check": lambda value: value.endswith("@iitgn.ac.in")},
+        {"column": "Full_Name", "not_null": True},
+        {"column": "Reputation_Score", "not_null": True, "check": lambda value: 0.0 <= value <= 5.0},
+        {"column": "Gender", "not_null": True, "check": lambda value: value in {"Male", "Female", "Other"}},
+    ],
+)
+
+members = db.get_table("Members")
+tx = db.begin_transaction()
+tx.wal_path = wal_path
+members.insert_row(
+    {
+        "MemberID": 1,
+        "OAUTH_TOKEN": "tok_crash",
+        "Email": "crash@iitgn.ac.in",
+        "Full_Name": "Crash User",
+        "Reputation_Score": 4.0,
+        "Phone_Number": "7000000000",
+        "Created_At": "2026-01-10 10:00:00",
+        "Gender": "Other",
+    },
+    tx=tx,
+)
+os._exit(1)
+""".strip()
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = BASE_DIR + os.pathsep + env.get("PYTHONPATH", "")
+            subprocess.run(
+                [sys.executable, "-c", crash_script, wal_path],
+                check=False,
+                env=env,
+                cwd=BASE_DIR,
+            )
+
+            committed_ops = Transaction.committed_operations_from_wal(wal_path)
+            self.assertEqual(len(committed_ops), 0)
 
     def tearDown(self):
-        self.db_manager.delete_database("test_atomicity_db")
+        self.db_manager.delete_database("test_integrity_db")
 
 
 if __name__ == "__main__":

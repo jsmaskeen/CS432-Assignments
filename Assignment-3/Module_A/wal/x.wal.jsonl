@@ -1,0 +1,4 @@
+{"action":"CREATE_TABLE","columns":["id","v"],"degree":4,"foreign_keys":null,"indexer":"bplus","name":"T","primary_key":"id","ts":1775343619.2417676,"type":"DDL"}
+{"ts":1775343619.2466166,"tx_id":1,"type":"BEGIN"}
+{"action":"insert","key":1,"row":{"id":1,"v":2},"seq":0,"table_name":"T","ts":1775343619.2468636,"tx_id":1,"type":"OP"}
+{"ts":1775343619.2471526,"tx_id":1,"type":"COMMIT"}
