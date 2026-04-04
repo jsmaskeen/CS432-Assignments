@@ -2,6 +2,7 @@
 import sys
 import os
 import importlib.util
+from threading import RLock
 
 ASSN2_MODULE_A = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../Assignment-2/Module_A"))
 
@@ -24,6 +25,13 @@ class Table(BaseTable):
         super().__init__(name, columns, primary_key, **kwargs)
         self.foreign_keys = foreign_keys if foreign_keys else []
         self.db_manager = db_manager
+        self._table_lock = RLock()
+
+    def acquire_table_lock(self, blocking: bool = True, timeout: float = -1):
+        return self._table_lock.acquire(blocking, timeout)
+
+    def release_table_lock(self):
+        self._table_lock.release()
 
     def _check_foreign_key(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
         if not self.db_manager:
@@ -39,85 +47,91 @@ class Table(BaseTable):
                 raise ValueError(f"Foreign key constraint failed: value {foreign_key_value} not found in {fk['references_table']}({fk['references_column']})")
             
     def select(self, key: int, tx: Optional["Transaction"] = None):
-        if tx is not None:
-            found, staged_row = tx.staged_lookup(self.name, key)
-            if found:
-                return staged_row
-        return super().select(key)
+        with self._table_lock:
+            if tx is not None:
+                found, staged_row = tx.staged_lookup(self.name, key)
+                if found:
+                    return staged_row
+            return super().select(key)
 
     def select_all(self, tx: Optional["Transaction"] = None):
-        if tx is None:
-            return super().select_all()
+        with self._table_lock:
+            if tx is None:
+                return super().select_all()
 
-        merged_rows = {row[self.primary_key]: row for row in super().select_all()}
-        for key, row in tx.staged_rows_for_table(self.name).items():
-            if row is None:
-                merged_rows.pop(key, None)
-            else:
-                merged_rows[key] = row
+            merged_rows = {row[self.primary_key]: row for row in super().select_all()}
+            for key, row in tx.staged_rows_for_table(self.name).items():
+                if row is None:
+                    merged_rows.pop(key, None)
+                else:
+                    merged_rows[key] = row
 
-        return [merged_rows[key] for key in sorted(merged_rows.keys())]
+            return [merged_rows[key] for key in sorted(merged_rows.keys())]
 
     def select_range(self, start_key: int, end_key: int, tx: Optional["Transaction"] = None):
-        if tx is None:
-            return super().select_range(start_key, end_key)
+        with self._table_lock:
+            if tx is None:
+                return super().select_range(start_key, end_key)
 
-        rows = [
-            row
-            for row in self.select_all(tx=tx)
-            if start_key <= row[self.primary_key] <= end_key
-        ]
-        rows.sort(key=lambda row: row[self.primary_key])
-        return rows
+            rows = [
+                row
+                for row in self.select_all(tx=tx)
+                if start_key <= row[self.primary_key] <= end_key
+            ]
+            rows.sort(key=lambda row: row[self.primary_key])
+            return rows
 
     def insert_row(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
-        self._check_foreign_key(row, tx=tx)
+        with self._table_lock:
+            self._check_foreign_key(row, tx=tx)
 
-        if tx is None:
-            super().insert_row(row)
-            return
+            if tx is None:
+                super().insert_row(row)
+                return
 
-        tx.stage_insert(self.name, row[self.primary_key], row)
+            tx.stage_insert(self.name, row[self.primary_key], row)
         
     def update_row(self, key: int, new_data: Dict[str, Any], tx: Optional["Transaction"] = None):
-        existing = self.select(key, tx=tx)
-        if not existing:
-            return False
+        with self._table_lock:
+            existing = self.select(key, tx=tx)
+            if not existing:
+                return False
 
-        updated_row = {**existing, **new_data}
-        self._check_foreign_key(updated_row, tx=tx)
+            updated_row = {**existing, **new_data}
+            self._check_foreign_key(updated_row, tx=tx)
 
-        if tx is None:
-            return super().update_row(key, new_data)
+            if tx is None:
+                return super().update_row(key, new_data)
 
-        tx.stage_update(self.name, key, updated_row)
-        return True
+            tx.stage_update(self.name, key, updated_row)
+            return True
     
     def delete_row(self, key: int, tx: Optional["Transaction"] = None):
-        if not self.db_manager:
+        with self._table_lock:
+            if not self.db_manager:
+                if tx is None:
+                    return super().delete_row(key)
+                tx.stage_delete(self.name, key)
+                return True
+
+            for table in self.db_manager.tables.values():
+                if table.foreign_keys:
+                    for fk in table.foreign_keys:
+                        if fk['references_table'] == self.name:
+                            all_rows = table.select_all(tx=tx)
+                            keys_to_delete = []
+                            for row in all_rows:
+                                if row.get(fk['column']) == key:
+                                    if fk.get('on_delete', 'RESTRICT').upper() == 'CASCADE':
+                                        keys_to_delete.append(row[table.primary_key])
+                                    else:
+                                        raise ValueError(f"Cannot delete row with key {key} from table {self.name} because it is referenced by table {table.name}")
+                            
+                            for k in keys_to_delete:
+                                table.delete_row(k, tx=tx)
+
             if tx is None:
                 return super().delete_row(key)
+
             tx.stage_delete(self.name, key)
             return True
-
-        for table in self.db_manager.tables.values():
-            if table.foreign_keys:
-                for fk in table.foreign_keys:
-                    if fk['references_table'] == self.name:
-                        all_rows = table.select_all(tx=tx)
-                        keys_to_delete = []
-                        for row in all_rows:
-                            if row.get(fk['column']) == key:
-                                if fk.get('on_delete', 'RESTRICT').upper() == 'CASCADE':
-                                    keys_to_delete.append(row[table.primary_key])
-                                else:
-                                    raise ValueError(f"Cannot delete row with key {key} from table {self.name} because it is referenced by table {table.name}")
-                        
-                        for k in keys_to_delete:
-                            table.delete_row(k, tx=tx)
-
-        if tx is None:
-            return super().delete_row(key)
-
-        tx.stage_delete(self.name, key)
-        return True

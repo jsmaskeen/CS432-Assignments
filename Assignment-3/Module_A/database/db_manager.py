@@ -54,8 +54,27 @@ class Database(BaseDatabase):
         return self.active_transaction
 
     def validate_transaction(self, tx: Transaction):
+        if tx is None:
+            raise ValueError("Transaction is required")
         if tx.db is not self:
             raise ValueError("Transaction belongs to a different database")
+        if self.active_transaction is not tx:
+            raise ValueError("Transaction is not active on this database")
+
+    def _acquire_transaction_table_locks(self, tx: Transaction):
+        locked_tables = []
+        touched_table_names = sorted({op.table_name for op in tx.operations})
+
+        for table_name in touched_table_names:
+            table = self.get_table(table_name)
+            table.acquire_table_lock()
+            locked_tables.append(table)
+
+        return locked_tables
+
+    def _release_transaction_table_locks(self, locked_tables):
+        for table in reversed(locked_tables):
+            table.release_table_lock()
 
     def apply_operation(self, op: Transaction_operation, undo_log: List[Transaction_operation]):
         table = self.get_table(op.table_name)
@@ -109,6 +128,7 @@ class Database(BaseDatabase):
     def commit_transaction(self, tx: Transaction):
         self.validate_transaction(tx)
         undo_log: List[Transaction_operation] = []
+        locked_tables = self._acquire_transaction_table_locks(tx)
 
         try:
             for op in tx.operations:
@@ -122,9 +142,11 @@ class Database(BaseDatabase):
                     pass
 
             self.active_transaction = None
+            self._release_transaction_table_locks(locked_tables)
             raise RuntimeError(f"Transaction failed and was rolled back: {exc}") from exc
 
         self.active_transaction = None
+        self._release_transaction_table_locks(locked_tables)
         
     def rollback_transaction(self, tx: Transaction):
         self.validate_transaction(tx)
