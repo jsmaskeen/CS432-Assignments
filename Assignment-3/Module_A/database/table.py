@@ -33,6 +33,15 @@ class Table(BaseTable):
     def release_table_lock(self):
         self._table_lock.release()
 
+    def _apply_insert_direct(self, row: Dict[str, Any]):
+        super().insert_row(row)
+
+    def _apply_update_direct(self, key: int, row: Dict[str, Any]):
+        return super().update_row(key, row)
+
+    def _apply_delete_direct(self, key: int):
+        return super().delete_row(key)
+
     def _check_foreign_key(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
         if not self.db_manager:
             return 
@@ -82,16 +91,26 @@ class Table(BaseTable):
             return rows
 
     def insert_row(self, row: Dict[str, Any], tx: Optional["Transaction"] = None):
+        if tx is None and self.db_manager is not None:
+            if self.db_manager.active_transaction is None:
+                return self.db_manager.run_autocommit(lambda implicit_tx: self.insert_row(row, tx=implicit_tx))
+            tx = self.db_manager.active_transaction
+
         with self._table_lock:
             self._check_foreign_key(row, tx=tx)
 
             if tx is None:
-                super().insert_row(row)
+                self._apply_insert_direct(row)
                 return
 
             tx.stage_insert(self.name, row[self.primary_key], row)
         
     def update_row(self, key: int, new_data: Dict[str, Any], tx: Optional["Transaction"] = None):
+        if tx is None and self.db_manager is not None:
+            if self.db_manager.active_transaction is None:
+                return self.db_manager.run_autocommit(lambda implicit_tx: self.update_row(key, new_data, tx=implicit_tx))
+            tx = self.db_manager.active_transaction
+
         with self._table_lock:
             existing = self.select(key, tx=tx)
             if not existing:
@@ -101,16 +120,21 @@ class Table(BaseTable):
             self._check_foreign_key(updated_row, tx=tx)
 
             if tx is None:
-                return super().update_row(key, new_data)
+                return self._apply_update_direct(key, new_data)
 
             tx.stage_update(self.name, key, updated_row)
             return True
     
     def delete_row(self, key: int, tx: Optional["Transaction"] = None):
+        if tx is None and self.db_manager is not None:
+            if self.db_manager.active_transaction is None:
+                return self.db_manager.run_autocommit(lambda implicit_tx: self.delete_row(key, tx=implicit_tx))
+            tx = self.db_manager.active_transaction
+
         with self._table_lock:
             if not self.db_manager:
                 if tx is None:
-                    return super().delete_row(key)
+                    return self._apply_delete_direct(key)
                 tx.stage_delete(self.name, key)
                 return True
 
@@ -131,7 +155,7 @@ class Table(BaseTable):
                                 table.delete_row(k, tx=tx)
 
             if tx is None:
-                return super().delete_row(key)
+                return self._apply_delete_direct(key)
 
             tx.stage_delete(self.name, key)
             return True
