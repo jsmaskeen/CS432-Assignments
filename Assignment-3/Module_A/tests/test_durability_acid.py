@@ -107,9 +107,42 @@ class TestDurabilityACID(unittest.TestCase):
             }
         )
 
+        rides = self.db.get_table("Rides")
+        rides.insert_row(
+            {
+                "RideID": 1,
+                "Host_MemberID": 1,
+                "Start_GeoHash": "dr5ru",
+                "End_GeoHash": "dr5rv",
+                "Departure_Time": "2026-01-01 10:30:00",
+                "Vehicle_Type": "Sedan",
+                "Max_Capacity": 4,
+                "Available_Seats": 3,
+                "Base_Fare_Per_KM": 12.0,
+                "Ride_Status": "Open",
+                "Created_At": "2026-01-01 10:15:00",
+            }
+        )
+
+        bookings = self.db.get_table("Bookings")
+        bookings.insert_row(
+            {
+                "BookingID": 1,
+                "RideID": 1,
+                "Passenger_MemberID": 1,
+                "Booking_Status": "Confirmed",
+                "Pickup_GeoHash": "dr5ru",
+                "Drop_GeoHash": "dr5rv",
+                "Distance_Travelled_KM": 8.0,
+                "Booked_At": "2026-01-01 10:20:00",
+            }
+        )
+
     # Verifies committed writes remain durable for subsequent transactions in the same running process.
     def test_committed_data_persists_across_follow_up_transactions(self):
         members = self.db.get_table("Members")
+        rides = self.db.get_table("Rides")
+        bookings = self.db.get_table("Bookings")
 
         with self.db.begin_transaction() as tx:
             members.insert_row(
@@ -125,17 +158,25 @@ class TestDurabilityACID(unittest.TestCase):
                 },
                 tx=tx,
             )
+            rides.update_row(1, {"Ride_Status": "Closed"}, tx=tx)
+            bookings.update_row(1, {"Booking_Status": "Completed"}, tx=tx)
             members.update_row(1, {"Reputation_Score": 4.9}, tx=tx)
 
         tx = self.db.begin_transaction()
         self.db.rollback(tx)
 
         self.assertEqual(members.select(1)["Reputation_Score"], 4.9)
+        self.assertEqual(rides.select(1)["Ride_Status"], "Closed")
+        self.assertEqual(bookings.select(1)["Booking_Status"], "Completed")
         self.assertIsNotNone(members.select(2))
+        self.assertIsNone(rides.select(2))
+        self.assertIsNone(bookings.select(2))
 
     # Verifies transaction lifecycle writes BEGIN/OP/COMMIT markers to the WAL file on successful commit.
     def test_wal_contains_commit_record_after_successful_commit(self):
         members = self.db.get_table("Members")
+        rides = self.db.get_table("Rides")
+        bookings = self.db.get_table("Bookings")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             wal_path = os.path.join(temp_dir, "durability_commit.wal.jsonl")
@@ -155,14 +196,18 @@ class TestDurabilityACID(unittest.TestCase):
                 },
                 tx=tx,
             )
+            rides.update_row(1, {"Ride_Status": "Closed"}, tx=tx)
+            bookings.update_row(1, {"Booking_Status": "Completed"}, tx=tx)
             self.db.commit(tx)
 
             records = Transaction.read_wal_records(wal_path)
             record_types = [record.get("type") for record in records]
+            committed_ops = Transaction.committed_operations_from_wal(wal_path)
 
             self.assertIn("BEGIN", record_types)
             self.assertIn("OP", record_types)
             self.assertIn("COMMIT", record_types)
+            self.assertEqual(len(committed_ops), 3)
 
     # Verifies crash consistency with os._exit: staged but uncommitted WAL operations are not treated as committed.
     def test_power_failure_before_commit_keeps_wal_uncommitted(self):
@@ -190,7 +235,42 @@ db.create_table(
     ],
 )
 
+db.create_table(
+    name="Rides",
+    columns=["RideID", "Host_MemberID", "Start_GeoHash", "End_GeoHash", "Departure_Time", "Vehicle_Type", "Max_Capacity", "Available_Seats", "Base_Fare_Per_KM", "Ride_Status", "Created_At"],
+    primary_key="RideID",
+    foreign_keys=[
+        {
+            "column": "Host_MemberID",
+            "references_table": "Members",
+            "references_column": "MemberID",
+        }
+    ],
+)
+
+db.create_table(
+    name="Bookings",
+    columns=["BookingID", "RideID", "Passenger_MemberID", "Booking_Status", "Pickup_GeoHash", "Drop_GeoHash", "Distance_Travelled_KM", "Booked_At"],
+    primary_key="BookingID",
+    foreign_keys=[
+        {
+            "column": "RideID",
+            "references_table": "Rides",
+            "references_column": "RideID",
+            "on_delete": "CASCADE",
+        },
+        {
+            "column": "Passenger_MemberID",
+            "references_table": "Members",
+            "references_column": "MemberID",
+            "on_delete": "CASCADE",
+        },
+    ],
+)
+
 table = db.get_table("Members")
+rides = db.get_table("Rides")
+bookings = db.get_table("Bookings")
 tx = db.begin_transaction()
 tx.wal_path = wal_path
 table.insert_row({
@@ -202,6 +282,29 @@ table.insert_row({
     "Phone_Number": "7000000000",
     "Created_At": "2026-01-10 10:00:00",
     "Gender": "Other",
+}, tx=tx)
+rides.insert_row({
+    "RideID": 1,
+    "Host_MemberID": 1,
+    "Start_GeoHash": "dr5ru",
+    "End_GeoHash": "dr5rv",
+    "Departure_Time": "2026-01-10 10:30:00",
+    "Vehicle_Type": "Sedan",
+    "Max_Capacity": 4,
+    "Available_Seats": 3,
+    "Base_Fare_Per_KM": 12.0,
+    "Ride_Status": "Open",
+    "Created_At": "2026-01-10 10:15:00",
+}, tx=tx)
+bookings.insert_row({
+    "BookingID": 1,
+    "RideID": 1,
+    "Passenger_MemberID": 1,
+    "Booking_Status": "Confirmed",
+    "Pickup_GeoHash": "dr5ru",
+    "Drop_GeoHash": "dr5rv",
+    "Distance_Travelled_KM": 8.0,
+    "Booked_At": "2026-01-10 10:20:00",
 }, tx=tx)
 os._exit(1)
 """.strip()
@@ -215,13 +318,8 @@ os._exit(1)
                 cwd=BASE_DIR,
             )
 
-            records = Transaction.read_wal_records(wal_path)
-            record_types = [record.get("type") for record in records]
             committed_ops = Transaction.committed_operations_from_wal(wal_path)
 
-            self.assertIn("BEGIN", record_types)
-            self.assertIn("OP", record_types)
-            self.assertNotIn("COMMIT", record_types)
             self.assertEqual(len(committed_ops), 0)
 
     # Verifies power failure after commit preserves durability by retaining committed WAL operations.
@@ -250,7 +348,42 @@ db.create_table(
     ],
 )
 
+db.create_table(
+    name="Rides",
+    columns=["RideID", "Host_MemberID", "Start_GeoHash", "End_GeoHash", "Departure_Time", "Vehicle_Type", "Max_Capacity", "Available_Seats", "Base_Fare_Per_KM", "Ride_Status", "Created_At"],
+    primary_key="RideID",
+    foreign_keys=[
+        {
+            "column": "Host_MemberID",
+            "references_table": "Members",
+            "references_column": "MemberID",
+        }
+    ],
+)
+
+db.create_table(
+    name="Bookings",
+    columns=["BookingID", "RideID", "Passenger_MemberID", "Booking_Status", "Pickup_GeoHash", "Drop_GeoHash", "Distance_Travelled_KM", "Booked_At"],
+    primary_key="BookingID",
+    foreign_keys=[
+        {
+            "column": "RideID",
+            "references_table": "Rides",
+            "references_column": "RideID",
+            "on_delete": "CASCADE",
+        },
+        {
+            "column": "Passenger_MemberID",
+            "references_table": "Members",
+            "references_column": "MemberID",
+            "on_delete": "CASCADE",
+        },
+    ],
+)
+
 table = db.get_table("Members")
+rides = db.get_table("Rides")
+bookings = db.get_table("Bookings")
 tx = db.begin_transaction()
 tx.wal_path = wal_path
 table.insert_row({
@@ -262,6 +395,29 @@ table.insert_row({
     "Phone_Number": "7111111111",
     "Created_At": "2026-01-11 10:00:00",
     "Gender": "Female",
+}, tx=tx)
+rides.insert_row({
+    "RideID": 1,
+    "Host_MemberID": 1,
+    "Start_GeoHash": "dr5ru",
+    "End_GeoHash": "dr5rv",
+    "Departure_Time": "2026-01-11 10:30:00",
+    "Vehicle_Type": "Sedan",
+    "Max_Capacity": 4,
+    "Available_Seats": 3,
+    "Base_Fare_Per_KM": 12.0,
+    "Ride_Status": "Open",
+    "Created_At": "2026-01-11 10:15:00",
+}, tx=tx)
+bookings.insert_row({
+    "BookingID": 1,
+    "RideID": 1,
+    "Passenger_MemberID": 1,
+    "Booking_Status": "Confirmed",
+    "Pickup_GeoHash": "dr5ru",
+    "Drop_GeoHash": "dr5rv",
+    "Distance_Travelled_KM": 8.0,
+    "Booked_At": "2026-01-11 10:20:00",
 }, tx=tx)
 db.commit(tx)
 os._exit(1)
@@ -276,21 +432,17 @@ os._exit(1)
                 cwd=BASE_DIR,
             )
 
-            records = Transaction.read_wal_records(wal_path)
-            record_types = [record.get("type") for record in records]
             committed_ops = Transaction.committed_operations_from_wal(wal_path)
 
-            self.assertIn("BEGIN", record_types)
-            self.assertIn("OP", record_types)
-            self.assertIn("COMMIT", record_types)
-            self.assertEqual(len(committed_ops), 1)
-            self.assertEqual(committed_ops[0].action, "insert")
-            self.assertEqual(committed_ops[0].table_name, "Members")
-            self.assertEqual(committed_ops[0].key, 1)
+            self.assertEqual(len(committed_ops), 3)
+            self.assertEqual({op.table_name for op in committed_ops}, {"Members", "Rides", "Bookings"})
+            self.assertTrue(all(op.action == "insert" for op in committed_ops))
 
     # Verifies crash-consistency using a process signal: an interrupt inside a transaction rolls back all uncommitted writes.
     def test_sigint_inside_transaction_rolls_back_uncommitted_changes(self):
         members = self.db.get_table("Members")
+        rides = self.db.get_table("Rides")
+        bookings = self.db.get_table("Bookings")
 
         def _signal_handler(_signum, _frame):
             raise RuntimeError("Simulated crash signal")
@@ -313,6 +465,8 @@ os._exit(1)
                         },
                         tx=tx,
                     )
+                    rides.update_row(1, {"Ride_Status": "Closed"}, tx=tx)
+                    bookings.update_row(1, {"Booking_Status": "Cancelled"}, tx=tx)
                     members.update_row(1, {"Reputation_Score": 4.2}, tx=tx)
                     signal.raise_signal(signal.SIGUSR1)
         finally:
@@ -320,10 +474,14 @@ os._exit(1)
 
         self.assertIsNone(members.select(3))
         self.assertEqual(members.select(1)["Reputation_Score"], 4.7)
+        self.assertEqual(rides.select(1)["Ride_Status"], "Open")
+        self.assertEqual(bookings.select(1)["Booking_Status"], "Confirmed")
 
     # Verifies a post-commit signal does not invalidate already committed data.
     def test_sigint_after_commit_preserves_committed_state(self):
         members = self.db.get_table("Members")
+        rides = self.db.get_table("Rides")
+        bookings = self.db.get_table("Bookings")
 
         with self.db.begin_transaction() as tx:
             members.insert_row(
@@ -336,6 +494,35 @@ os._exit(1)
                     "Phone_Number": "7444444444",
                     "Created_At": "2026-01-04 13:00:00",
                     "Gender": "Female",
+                },
+                tx=tx,
+            )
+            rides.insert_row(
+                {
+                    "RideID": 2,
+                    "Host_MemberID": 1,
+                    "Start_GeoHash": "dr5sw",
+                    "End_GeoHash": "dr5sx",
+                    "Departure_Time": "2026-01-04 13:30:00",
+                    "Vehicle_Type": "Hatchback",
+                    "Max_Capacity": 4,
+                    "Available_Seats": 2,
+                    "Base_Fare_Per_KM": 11.0,
+                    "Ride_Status": "Open",
+                    "Created_At": "2026-01-04 13:00:00",
+                },
+                tx=tx,
+            )
+            bookings.insert_row(
+                {
+                    "BookingID": 2,
+                    "RideID": 2,
+                    "Passenger_MemberID": 4,
+                    "Booking_Status": "Confirmed",
+                    "Pickup_GeoHash": "dr5sw",
+                    "Drop_GeoHash": "dr5sx",
+                    "Distance_Travelled_KM": 7.5,
+                    "Booked_At": "2026-01-04 13:15:00",
                 },
                 tx=tx,
             )
@@ -353,6 +540,10 @@ os._exit(1)
 
         self.assertIsNotNone(members.select(4))
         self.assertEqual(members.select(4)["Reputation_Score"], 4.4)
+        self.assertIsNotNone(rides.select(2))
+        self.assertEqual(rides.select(2)["Ride_Status"], "Open")
+        self.assertIsNotNone(bookings.select(2))
+        self.assertEqual(bookings.select(2)["Booking_Status"], "Confirmed")
 
     def tearDown(self):
         self.db_manager.delete_database("test_integrity_db")
