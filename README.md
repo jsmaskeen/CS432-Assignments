@@ -4,6 +4,18 @@ Cab sharing portal made for students of IIT Gandhinagar, developed across four a
 
 ## To Run
 
+## Testing for Module A (ACID)
+
+Kindly run on a Linux Terminal (as we have used custom signals for crashing) or run over WSL. 
+
+```bash
+pip install pytest
+cd "Assignment-3/Module_A"
+pytest -v tests/ > test_output.out
+```
+
+Results: [`test_output.out`](./Assignment-3/Module_A/test_output.out)
+
 First navigate to `Assignment-2/Module_B`
 ### Manual (backend + frontend)
 

@@ -362,7 +362,7 @@ class Database(BaseDatabase):
         self.rollback_transaction(tx)
 
 class DatabaseManager(BaseDatabaseManager):
-    def create_database(self, db_name: str, recover: bool = False):
+    def create_database(self, db_name: str, recover: bool = False) -> Database:
         if db_name in self.databases:
             raise ValueError(f"Database with name {db_name} already exists")
         self.databases[db_name] = Database(db_name=db_name)
