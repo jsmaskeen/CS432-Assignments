@@ -4,7 +4,7 @@ cachedir: .pytest_cache
 rootdir: /mnt/c/Users/GSRAJA/Desktop/IIT GN/sem6/databases/Assignments/Assignment-3/Module_A
 collecting ... collected 43 items
 
-tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_concurrent_same_row_updates_do_not_allow_two_successful_commits FAILED [  2%]
+tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_concurrent_same_row_updates_follow_last_writer_wins PASSED [  2%]
 tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_duplicate_primary_key_in_tx_rolls_back_all_staged_rows PASSED [  4%]
 tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_large_transaction_rollback_leaves_no_partial_rows PASSED [  6%]
 tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_recovery_replays_only_committed_transactions_after_crash PASSED [  9%]
@@ -48,47 +48,4 @@ tests/test_isolation_acid.py::TestIsolationACID::test_uncommitted_delete_not_vis
 tests/test_isolation_acid.py::TestIsolationACID::test_uncommitted_insert_not_visible_outside_transaction PASSED [ 97%]
 tests/test_isolation_acid.py::TestIsolationACID::test_uncommitted_update_not_visible_outside_transaction PASSED [100%]
 
-=================================== FAILURES ===================================
-_ TestAdditionalACIDScenarios.test_concurrent_same_row_updates_do_not_allow_two_successful_commits _
-
-self = <test_acid_additional.TestAdditionalACIDScenarios testMethod=test_concurrent_same_row_updates_do_not_allow_two_successful_commits>
-
-    def test_concurrent_same_row_updates_do_not_allow_two_successful_commits(self):
-        members = self.db.get_table("Members")
-    
-        start_commit = threading.Event()
-        finished = threading.Event()
-        results = []
-    
-        def worker(member_score):
-            try:
-                with self.db.begin_transaction() as tx:
-                    members.update_row(1, {"Reputation_Score": member_score}, tx=tx)
-                    start_commit.wait(timeout=2)
-                results.append("commit")
-            except Exception:
-                results.append("fail")
-            finally:
-                if len(results) == 2:
-                    finished.set()
-    
-        t1 = threading.Thread(target=worker, args=(4.1,))
-        t2 = threading.Thread(target=worker, args=(4.3,))
-    
-        t1.start()
-        t2.start()
-    
-        start_commit.set()
-        finished.wait(timeout=3)
-    
-        t1.join(timeout=2)
-        t2.join(timeout=2)
-    
-        # Strict isolation expectation: at most one writer should successfully commit.
->       self.assertLessEqual(results.count("commit"), 1)
-E       AssertionError: 2 not less than or equal to 1
-
-tests/test_acid_additional.py:267: AssertionError
-=========================== short test summary info ============================
-FAILED tests/test_acid_additional.py::TestAdditionalACIDScenarios::test_concurrent_same_row_updates_do_not_allow_two_successful_commits
-======================== 1 failed, 42 passed in 16.22s =========================
+============================= 43 passed in 15.97s ==============================

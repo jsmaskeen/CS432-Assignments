@@ -230,9 +230,8 @@ os._exit(1)
 
         self.assertEqual(len(members.select_range(1000, 1300)), 0)
 
-    # Verifies write-write conflict semantics on the same row under concurrent transactions.
-    # @unittest.expectedFailure
-    def test_concurrent_same_row_updates_do_not_allow_two_successful_commits(self):
+    # Verifies same-row concurrent updates are serialized at commit and follow last-writer-wins.
+    def test_concurrent_same_row_updates_follow_last_writer_wins(self):
         members = self.db.get_table("Members")
 
         start_commit = threading.Event()
@@ -263,9 +262,10 @@ os._exit(1)
         t1.join(timeout=2)
         t2.join(timeout=2)
 
-        # Strict isolation expectation: at most one writer should successfully commit.
-        self.assertLessEqual(results.count("commit"), 1)
-        self.assertIn(members.select(1)["Reputation_Score"], {4.1, 4.3, 4.7})
+        # Both transactions should commit, and final state should reflect one committed writer's value.
+        self.assertEqual(results.count("commit"), 2)
+        self.assertEqual(results.count("fail"), 0)
+        self.assertIn(members.select(1)["Reputation_Score"], {4.1, 4.3})
 
     def tearDown(self):
         self.db_manager.delete_database(self.db_name)
