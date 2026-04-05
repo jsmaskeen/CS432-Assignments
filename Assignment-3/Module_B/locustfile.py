@@ -17,6 +17,8 @@ ADMIN_BOOTSTRAP_USERNAME = os.getenv("ADMIN_BOOTSTRAP_USERNAME", "admin")
 RACE_HOST_USERNAME = os.getenv("LOCUST_RACE_HOST_USERNAME", "locust_race_host")
 RACE_RIDE_CAPACITY = int(os.getenv("LOCUST_RACE_RIDE_CAPACITY", "2"))
 CONTENTION_MODE = os.getenv("LOCUST_CONTENTION_MODE", "signal").lower()
+FAILURE_ACCEPT_HOOK = os.getenv("LOCUST_FAILURE_ACCEPT_HOOK", "bookings.accept.post_flush")
+FAILURE_END_HOOK = os.getenv("LOCUST_FAILURE_END_HOOK", "rides.end.before_settlement_insert")
 
 GEOHASH_CHARS = "0123456789bcdefghjkmnpqrstuvwxyz"
 
@@ -242,14 +244,14 @@ class HostConcurrentUser(RajakUserBase):
         self.register_fresh_account("host")
         self.owned_rides: deque[int] = deque()
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(4)
     def create_open_ride(self) -> None:
         ride_id = self.create_ride(capacity=random.randint(3, 5))
         if ride_id:
             self.owned_rides.append(ride_id)
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(5)
     def manage_pending_bookings(self) -> None:
         ride_id = random.choice(list(self.owned_rides)) if self.owned_rides else None
@@ -301,7 +303,7 @@ class HostConcurrentUser(RajakUserBase):
                 name="POST /rides/bookings/{booking_id}/reject",
             )
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(2)
     def start_or_end_ride(self) -> None:
         ride_id = random.choice(list(self.owned_rides)) if self.owned_rides else None
@@ -330,7 +332,7 @@ class HostConcurrentUser(RajakUserBase):
                 name="POST /rides/{ride_id}/end",
             )
             
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(3)
     def browse_rides(self) -> None:
         self.client.get(
@@ -339,7 +341,7 @@ class HostConcurrentUser(RajakUserBase):
             name="GET /rides",
         )
 
-    @tag("race", "racing")
+    @tag("race", "racing", "failure")
     @task(1)
     def race_idle(self) -> None:
         self.client.get(
@@ -356,7 +358,7 @@ class RiderConcurrentUser(RajakUserBase):
         self.register_fresh_account("rider")
         self.last_race_generation_attempted: int = -1
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(7)
     def browse_open_rides(self) -> None:
         self.client.get(
@@ -365,7 +367,7 @@ class RiderConcurrentUser(RajakUserBase):
             name="GET /rides",
         )
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(5)
     def book_open_ride(self) -> None:
         list_res = self.client.get(
@@ -401,7 +403,7 @@ class RiderConcurrentUser(RajakUserBase):
             if res.status_code == 201:
                 self.booked_rides.append(ride_id)
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(3)
     def my_bookings(self) -> None:
         self.client.get(
@@ -410,7 +412,7 @@ class RiderConcurrentUser(RajakUserBase):
             name="GET /rides/my/bookings",
         )
 
-    @tag("race", "racing")
+    @tag("race", "racing", "failure")
     @task(4)
     def race_book_shared_ride(self) -> None:
         with shared_state.lock:
@@ -444,7 +446,7 @@ class AdminObserverUser(RajakUserBase):
     def on_start(self) -> None:
         self.login_or_register(ADMIN_BOOTSTRAP_USERNAME)
 
-    @tag("concurrent", "race", "racing")
+    @tag("concurrent", "race", "racing", "stress", "failure")
     @task(3)
     def ride_stats(self) -> None:
         with self.client.get(
@@ -462,7 +464,7 @@ class AdminObserverUser(RajakUserBase):
             else:
                 res.failure(f"unexpected status {res.status_code}")
 
-    @tag("concurrent", "race", "racing")
+    @tag("concurrent", "race", "racing", "stress", "failure")
     @task(2)
     def open_rides(self) -> None:
         self.client.get(
@@ -479,7 +481,7 @@ class RaceHostUser(RajakUserBase):
     def on_start(self) -> None:
         self.login_or_register(RACE_HOST_USERNAME)
         active_tags = set(getattr(self.environment.parsed_options, "tags", []) or [])
-        if "race" in active_tags:
+        if "race" in active_tags or "failure" in active_tags:
             self.ensure_race_ride()
 
     def ensure_race_ride(self) -> None:
@@ -498,7 +500,7 @@ class RaceHostUser(RajakUserBase):
             shared_state.race_host_member_id = -1
             shared_state.race_generation += 1
 
-    @tag("race", "racing")
+    @tag("race", "racing", "failure")
     @task(5)
     def race_accept_or_reject(self) -> None:
         self.ensure_race_ride()
@@ -538,7 +540,7 @@ class RaceHostUser(RajakUserBase):
                 operation_label=f"race-{endpoint}",
             )
 
-    @tag("race", "racing")
+    @tag("race", "racing", "failure")
     @task(2)
     def rollover_race_ride_if_closed(self) -> None:
         with shared_state.lock:
@@ -570,13 +572,49 @@ class RaceHostUser(RajakUserBase):
                 shared_state.race_host_member_id = -1
                 shared_state.race_generation += 1
 
-    @tag("concurrent")
+    @tag("concurrent", "stress")
     @task(1)
     def concurrent_health_ping(self) -> None:
         self.client.get(
             self.api_path("/rides"),
             params={"only_open": "true", "limit": 10},
             name="GET /rides",
+        )
+
+
+class ChaosAdminUser(RajakUserBase):
+    fixed_count = 1
+    weight = 0
+
+    def on_start(self) -> None:
+        active_tags = set(getattr(self.environment.parsed_options, "tags", []) or [])
+        if "failure" not in active_tags:
+            raise StopUser()
+        self.login_or_register(ADMIN_BOOTSTRAP_USERNAME)
+        self.client.post(
+            self.api_path("/testing/chaos/reset"),
+            headers=self.auth_headers(),
+            name="FAILURE POST /testing/chaos/reset",
+        )
+
+    @tag("failure")
+    @task(5)
+    def inject_accept_failures(self) -> None:
+        self.client.post(
+            self.api_path("/testing/chaos/enable"),
+            headers=self.auth_headers(),
+            json={"hook": FAILURE_ACCEPT_HOOK, "fail_count": 1},
+            name="FAILURE POST /testing/chaos/enable accept",
+        )
+
+    @tag("failure")
+    @task(1)
+    def inject_end_ride_failures(self) -> None:
+        self.client.post(
+            self.api_path("/testing/chaos/enable"),
+            headers=self.auth_headers(),
+            json={"hook": FAILURE_END_HOOK, "fail_count": 1},
+            name="FAILURE POST /testing/chaos/enable end",
         )
 
 

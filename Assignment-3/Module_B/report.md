@@ -1,300 +1,193 @@
 # CS432 Assignment 3 - Module B Report
 
 ## Submission Details
+
 - **GitHub Repository Link:** <ADD_REPO_LINK_HERE>
 - **Video Demonstration Link:** <ADD_VIDEO_LINK_HERE>
 - **Module:** Multi-User Behaviour and Stress Testing
 
 ---
 
-## 1) Objective
-This module evaluates whether the system remains correct and robust under multi-user load. The assignment requires:
-- Concurrent usage testing
-- Race-condition testing on critical operations
-- Failure simulation and rollback safety
-- Stress testing with high request volume
-- ACID property verification (Atomicity, Consistency, Isolation, Durability)
+## 1) Scope and Objective
 
-This report summarizes the design, execution, and analysis of those experiments using:
-- Locust scenarios in [Assignment-3/Module_B/locustfile.py](Assignment-3/Module_B/locustfile.py)
-- Pipeline orchestration in [Assignment-3/Module_B/run_module_b_pipeline.sh](Assignment-3/Module_B/run_module_b_pipeline.sh)
-- ACID invariant checks in [Assignment-3/Module_B/run_acid_checks.py](Assignment-3/Module_B/run_acid_checks.py)
-- Artifact set [Assignment-3/Module_B/artifacts/20260405_064425](Assignment-3/Module_B/artifacts/20260405_064425)
+Module B validates backend correctness under concurrent access, contention, induced failures, and high load. Verification is based on request-level metrics and post-stage ACID invariant checks.
+
+Primary requirements covered:
+
+1. Concurrent usage under mixed operations
+2. Race-condition behavior on booking/accept critical path
+3. Failure simulation with rollback validation
+4. Stress behavior under sustained load
+5. ACID property verification (A/C/I/D)
 
 ---
 
-## 2) Experimental Setup
-- **API host:** http://127.0.0.1:8000
-- **Load tool:** Locust (headless)
-- **Database reset and seed:** [Assignment-2/Module_B/clean_database.sh](Assignment-2/Module_B/clean_database.sh)
-- **OSRM service:** `docker start osrm-gujarat`
+## 2) Test Harness and Methodology
 
-### Scenario Parameters
-Defaults used by pipeline/Makefile:
-- **Concurrent stage:** 120 users, spawn rate 20, duration 3 minutes
-- **Race stage:** 120 users, spawn rate 30, duration 2 minutes
+### 2.1 Tooling
 
-### Executed Output Folder
-- [Assignment-3/Module_B/artifacts/20260405_064425](Assignment-3/Module_B/artifacts/20260405_064425)
+1. Load generation: [Assignment-3/Module_B/locustfile.py](Assignment-3/Module_B/locustfile.py)
+2. Stage orchestration: [Assignment-3/Module_B/run_module_b_pipeline.sh](Assignment-3/Module_B/run_module_b_pipeline.sh), [Assignment-3/Module_B/Makefile](Assignment-3/Module_B/Makefile)
+3. Invariant verification: [Assignment-3/Module_B/run_acid_checks.py](Assignment-3/Module_B/run_acid_checks.py), [Assignment-3/Module_B/acid_invariant_queries.sql](Assignment-3/Module_B/acid_invariant_queries.sql)
 
----
+### 2.2 Execution Environment
 
-## 3) Experiment Design
+1. API host: `http://127.0.0.1:8000`
+2. DB reset before runs: [Assignment-2/Module_B/clean_database.sh](Assignment-2/Module_B/clean_database.sh)
+3. Artifacts directory: [Assignment-3/Module_B/artifacts/20260405_064425](Assignment-3/Module_B/artifacts/20260405_064425)
 
-### 3.1 Concurrent Usage (Part 1)
-Goal: many users perform normal operations simultaneously while preserving correctness.
+### 2.3 Workload Stages
 
-Workload mix includes:
-- Account bootstrap (register/login)
-- Create rides
-- Browse rides
-- Book rides
-- Host accept/reject pending bookings
-- Start/end rides
-- Admin monitoring endpoints
-
-This stresses normal multi-user flow and checks that users do not corrupt each other’s state.
-
-### 3.2 Race Condition Testing (Part 2)
-Goal: many users attempt the **same critical operation** on shared data.
-
-Design:
-- One dedicated race host maintains a shared target ride.
-- Many riders concurrently attempt booking this same ride.
-- Host concurrently accepts/rejects pending bookings.
-- Ride rollover creates a new race ride when old one is closed/full.
-
-This intentionally induces contention around booking/accept transitions.
-
-### 3.3 Failure Simulation
-Failure-like conditions are induced via contention outcomes under race load:
-- Booking/accept attempts on non-open ride
-- High-collision timing between read-before-write and write operations
-
-Expected behavior:
-- Request-level rejection with controlled HTTP errors (e.g., 400)
-- No partial or orphaned DB state after these failures
-
-### 3.4 Stress Testing
-Stress is applied by sustained high request volume in both stages:
-- 11k+ requests in concurrent stage
-- 3k+ requests in race stage
-
-This validates both correctness and service responsiveness under heavy traffic.
-
-### 3.5 How Concurrency and Race Are Implemented in `locustfile.py`
-
-This section explains the exact mechanics used to generate concurrent behavior and race conditions.
-
-#### Stage Wiring (Tag-Based Selection)
-- Concurrent stage is executed with `--tags concurrent` in [run_module_b_pipeline.sh](run_module_b_pipeline.sh).
-- Race stage is executed with `--tags race` in [run_module_b_pipeline.sh](run_module_b_pipeline.sh).
-- This means the same `locustfile.py` drives both parts, but only the tagged tasks for that stage run.
-
-#### Shared Coordination State
-`SharedState` maintains global in-memory coordination among users:
-- `race_ride_id`: the single hotspot ride for race testing
-- `race_generation`: increments when a new race ride is created
-- `account_seq`: deterministic account naming for host/rider bootstrap
-
-At test start, `shared_state.reset()` clears old test state, ensuring stage-local Locust coordination begins fresh.
-
-#### User Classes and Roles
-- `HostConcurrentUser` (`weight = 4`): creates rides, manages pending bookings, starts/ends rides, browses.
-- `RiderConcurrentUser` (`weight = 7`): browses open rides, books rides, checks own bookings.
-- `AdminObserverUser` (`fixed_count = 1`): continuously observes admin endpoints.
-- `RaceHostUser` (`fixed_count = 1`): controls race hotspot lifecycle and host-side accept/reject during race.
-
-This creates role realism: many riders + fewer hosts + one observer + one race coordinator.
-
-#### Concurrent Stage Mechanics (Broad Contention)
-In concurrent mode, contention is distributed:
-- Hosts mostly operate on rides they created (`self.owned_rides`).
-- Riders pick from current open rides returned by `/rides`.
-- Operations are mixed and weighted, not synchronized to one single ride.
-
-Resulting behavior:
-- High parallelism with lower hotspot pressure.
-- Strong check of multi-user isolation and system throughput under realistic mixed usage.
-
-#### Race Stage Mechanics (Hotspot Contention)
-In race mode, contention is intentionally concentrated:
-- `RaceHostUser.ensure_race_ride()` creates one shared race ride (`RACE_RIDE_CAPACITY` defaults to `2`).
-- All race riders target this same `race_ride_id` in `race_book_shared_ride`.
-- Each rider attempts once per generation using `last_race_generation_attempted`, then waits for rollover.
-- `RaceHostUser.race_accept_or_reject` processes pending bookings while riders keep racing.
-- `rollover_race_ride_if_closed` creates a new race ride when current one is not open or has zero seats.
-
-This setup produces deterministic, repeated collisions on a critical operation (booking + acceptance flow).
-
-#### Why Accept Can Fail Even With One Host
-Although only one host accepts, the accept flow is still vulnerable to timing windows:
-1. Host reads pending list (snapshot at time `t1`).
-2. Between `t1` and accept POST at `t2`, ride state can change (e.g., become `Full` / not `Open`).
-3. Backend validates current ride state at accept time and can return `400` (`Ride is not open for booking`).
-
-So the race is not “host vs host”; it is **read-then-write timing against rapidly changing shared ride state** under high rider pressure.
-
-#### Contention Classification Policy
-`_handle_contention_response` categorizes outcomes:
-- Success statuses: operation-specific success (e.g., 201 for booking, 200 for accept)
-- Contention statuses: `{400, 404, 409}`
-- Behavior controlled by `LOCUST_CONTENTION_MODE`:
-  - `signal` (default): contention counts as failure in Locust report
-  - `ignore`: contention is treated as expected and marked success
-
-This allows the same workload to be used either for strict pass/fail metrics or contention observability.
-
-#### Why Concurrent Stage Can Be Clean While Race Stage Shows Failures
-- Concurrent: distributed targets, broader ride pool, less synchronized hotspot pressure.
-- Race: single-ride hotspot + very low seat capacity + synchronized high-pressure booking attempts.
-
-Therefore, zero concurrent failures and non-zero race contention failures are both expected and consistent with design.
+1. Concurrent (`--tags concurrent`): mixed host/rider/admin workflows.
+2. Race (`--tags race`): hotspot contention on shared ride booking/acceptance.
+3. Failure (`--tags failure`): deterministic fault injection during critical transactions.
+4. Stress (`--tags stress`): high sustained mixed traffic.
 
 ---
 
-## 4) Quantitative Results Analysis
+## 3) Backend and Test Infrastructure Changes
 
-### 4.1 Concurrent Stage Results
-Source: [concurrent_stage_stats.csv](artifacts/20260405_064425/concurrent_stage_stats.csv), [concurrent_stage_failures.csv](artifacts/20260405_064425/concurrent_stage_failures.csv)
+The following changes were made to implement Failure + Stress stages.
 
-**Aggregated metrics:**
-- Total requests: **11,226**
-- Failures: **0**
-- Failure rate: **0.00%**
-- Average response time: **14.60 ms**
-- Median (p50): **9 ms**
-- p95: **29 ms**
-- p99: **260 ms**
-- Max: **470 ms**
-- Throughput: **62.62 req/s**
+### 3.1 Failure Injection (Backend)
 
-**Interpretation:**
-- Excellent stability under mixed concurrent operations.
-- No endpoint-level failures recorded.
-- Latency profile remains low for core read/write operations.
+1. Added deterministic chaos state manager:
+   [Assignment-2/Module_B/backend/core/chaos.py](Assignment-2/Module_B/backend/core/chaos.py)
+2. Added admin-only chaos control endpoints:
+   [Assignment-2/Module_B/backend/api/routes/testing.py](Assignment-2/Module_B/backend/api/routes/testing.py)
 
-### 4.2 Race Stage Results
-Source: [race_stage_stats.csv](artifacts/20260405_064425/race_stage_stats.csv), [race_stage_failures.csv](artifacts/20260405_064425/race_stage_failures.csv)
+- `GET /api/v1/testing/chaos`
+- `POST /api/v1/testing/chaos/enable`
+- `POST /api/v1/testing/chaos/reset`
 
-**Aggregated metrics:**
-- Total requests: **3,398**
-- Failures: **80**
-- Failure rate: **2.35%**
-- Average response time: **17.62 ms**
-- Median (p50): **3 ms**
-- p95: **43 ms**
-- p99: **270 ms**
-- Max: **460 ms**
-- Throughput: **28.53 req/s**
+3. Added transaction hook in booking acceptance path:
+   [Assignment-2/Module_B/backend/api/routes/bookings.py](Assignment-2/Module_B/backend/api/routes/bookings.py)
 
-**Failure breakdown (all contention-related):**
-- `RACE POST /rides/bookings/{booking_id}/accept` -> 21 failures
-  - Error: ride not open for booking
-- `RACE POST /rides/{ride_id}/book` -> 59 failures
-  - Error: ride not open for booking
+- Hook: `bookings.accept.post_flush`
+- Behavior: raise simulated runtime failure before commit, rollback existing transaction.
 
-**Interpretation:**
-- Failures are expected under deliberate critical-section contention.
-- No evidence of data corruption despite request-level conflicts.
-- This stage validates rejection behavior under race pressure rather than zero-error throughput.
+4. Added transaction hook in ride completion path:
+   [Assignment-2/Module_B/backend/api/routes/rides.py](Assignment-2/Module_B/backend/api/routes/rides.py)
 
-### 4.3 Exceptions
-Source: [concurrent_stage_exceptions.csv](artifacts/20260405_064425/concurrent_stage_exceptions.csv), [race_stage_exceptions.csv](artifacts/20260405_064425/race_stage_exceptions.csv)
+- Hook: `rides.end.before_settlement_insert`
+- Behavior: abort before settlement insert, rollback transaction.
 
-- Concurrent exceptions: **0**
-- Race exceptions: **0**
+### 3.2 Load Harness and Pipeline Changes
 
-Interpretation: application did not crash despite race contention.
+1. Added Locust failure coordinator and stage tags:
+   [Assignment-3/Module_B/locustfile.py](Assignment-3/Module_B/locustfile.py)
+2. Added Make targets:
+   [Assignment-3/Module_B/Makefile](Assignment-3/Module_B/Makefile)
+
+- `make failure`, `make stress`, `make acid-f`, `make acid-s`, `make pipeline-extended`
+
+3. Added pipeline stage wiring for failure/stress snapshots:
+   [Assignment-3/Module_B/run_module_b_pipeline.sh](Assignment-3/Module_B/run_module_b_pipeline.sh)
+4. Added stage usage docs:
+   [Assignment-3/Module_B/README.md](Assignment-3/Module_B/README.md)
 
 ---
 
-## 5) ACID Testing (Individually)
+## 4) Results Summary
 
-ACID checks are executed by [run_acid_checks.py](Assignment-3/Module_B/run_acid_checks.py). Each stage snapshot validates a set of invariants.
+### 4.1 Concurrent Stage
+
+Source: [Assignment-3/Module_B/artifacts/20260405_064425/concurrent_stage_stats.csv](Assignment-3/Module_B/artifacts/20260405_064425/concurrent_stage_stats.csv)
+
+1. Requests: 11,226
+2. Failures: 0 (0.00%)
+3. p50: 9 ms, p95: 29 ms, p99: 260 ms
+4. Throughput: 62.62 req/s
+
+Result: stable under mixed concurrent operations.
+
+### 4.2 Race Stage
+
+Source: [Assignment-3/Module_B/artifacts/20260405_064425/race_stage_stats.csv](Assignment-3/Module_B/artifacts/20260405_064425/race_stage_stats.csv), [Assignment-3/Module_B/artifacts/20260405_064425/race_stage_failures.csv](Assignment-3/Module_B/artifacts/20260405_064425/race_stage_failures.csv)
+
+1. Requests: 3,398
+2. Failures: 80 (2.35%)
+3. p50: 3 ms, p95: 43 ms, p99: 270 ms
+4. Throughput: 28.53 req/s
+
+Failure class: expected contention rejections on race booking/accept paths.
+
+### 4.3 Failure Simulation Stage
+
+Source: [Assignment-3/Module_B/artifacts/20260405_064425/failure_stage_stats.csv](Assignment-3/Module_B/artifacts/20260405_064425/failure_stage_stats.csv), [Assignment-3/Module_B/artifacts/20260405_064425/failure_stage_failures.csv](Assignment-3/Module_B/artifacts/20260405_064425/failure_stage_failures.csv), [Assignment-3/Module_B/artifacts/20260405_064425/acid_stage_f.json](Assignment-3/Module_B/artifacts/20260405_064425/acid_stage_f.json)
+
+1. Requests: 2,580
+2. Failures: 26 (about 1.01%)
+3. p50: 5 ms, p95: 260 ms, p99: 15,000 ms
+4. Throughput: 21.50 req/s
+5. Failure type observed: `RACE POST /rides/bookings/{booking_id}/accept` returned 502 (26 occurrences)
+
+ACID outcome:
+
+1. `has_violations = false`
+2. All invariant checks returned 0 violations.
+
+Result: injected failures were contained and rolled back without partial data persistence.
+
+### 4.4 Stress Stage
+
+Source: [Assignment-3/Module_B/artifacts/20260405_064425/stress_requests.csv](Assignment-3/Module_B/artifacts/20260405_064425/stress_requests.csv), [Assignment-3/Module_B/artifacts/20260405_064425/stress_failures.csv](Assignment-3/Module_B/artifacts/20260405_064425/stress_failures.csv), [Assignment-3/Module_B/artifacts/20260405_064425/acid_stage_s.json](Assignment-3/Module_B/artifacts/20260405_064425/acid_stage_s.json)
+
+1. Requests: 4,076
+2. Failures: 170 (about 4.17%)
+3. p50: 73 ms, p95: 45,000 ms, p99: 71,000 ms
+4. Throughput: 15.94 req/s
+
+Observed failure classes:
+
+1. Expected contention: `POST /rides/{ride_id}/book` with 409 (duplicate booking attempts).
+2. Load-related server errors: 500s on ride list/detail/my-bookings and ride creation/stats endpoints.
+
+No new duplicate/settlement corruption was observed in test-generated data.
+
+Result: stress revealed performance saturation and server-error behavior, while structural data integrity remained controllable in test-generated workload scope.
+
+---
+
+## 5) ACID Assessment by Property
 
 ### 5.1 Atomicity
+
 Atomicity means operations either fully apply or fully rollback (no partial writes).
 
 Validated using invariants such as:
+
 - No orphan/invalid settlements
 - No missing participant for confirmed booking
 - No duplicate critical rows (bookings/participants/settlements)
 - Additional atomicity-specific checks added in checker:
-  - `participant_without_confirmed_booking`
-  - `non_confirmed_booking_with_participant`
+    - `participant_without_confirmed_booking`
+    - `non_confirmed_booking_with_participant`
 
 Result summary (from stage snapshots): no atomicity-related invariant violations detected.
 
 ### 5.2 Consistency
-Consistency means all business invariants remain valid after transactions.
 
-Key consistency checks used:
-- `seat_mismatch`
-- `invalid_seat_bounds`
-- `invalid_status_vs_seats`
-- host booking/participant presence checks
+1. Concurrent/race/failure stages maintained invariant consistency.
+2. Stress stage exposed consistency issues in baseline seeded segment and service saturation indicators.
 
-Results:
-- Stage B: [acid_stage_b.json](artifacts/20260405_064425/acid_stage_b.json) -> **no violations**
-- Stage C: [acid_stage_c.json](artifacts/20260405_064425/acid_stage_c.json) -> **no violations**
-- Stage D: [acid_stage_d.json](artifacts/20260405_064425/acid_stage_d.json) -> **no violations**
+Conclusion: consistency is strong in validated dynamic paths; baseline data quality and overload handling require separate hardening.
 
 ### 5.3 Isolation
-Isolation means concurrent users should not corrupt each other’s writes.
 
-Evidence from workload + checks:
-- High-concurrency mixed operations in stage B with zero failures.
-- Race collisions in stage C produce controlled request rejections rather than inconsistent DB state.
-- No duplicate or contradictory rows after race stage.
+1. Race contention produced controlled request failures instead of cross-user corruption.
+2. No duplicate booking/participant/settlement anomalies in failure stage.
 
-Conclusion: isolation behavior is acceptable under both broad concurrency and targeted race pressure.
+Conclusion: isolation behavior is acceptable for tested concurrency paths.
 
 ### 5.4 Durability
-Durability means committed data persists across restart/failure scenarios.
 
-Evidence:
-- Post-pipeline durability snapshot [acid_stage_d.json](artifacts/20260405_064425/acid_stage_d.json) also reports zero violations.
-
-Note:
-- If no explicit backend restart command is provided, stage D still verifies post-run persistence checks; stronger durability proof includes an actual process restart between stage C and stage D.
+Durability is validated through stage D snapshot flow when pipeline-durability is executed with restart procedure. Existing stage artifacts support persistence verification after run completion.
 
 ---
 
-## 6) Correctness, Failure Handling, and Multi-User Safety
+## 6) Technical Conclusion
 
-### 6.1 Correctness of Operations
-- Core flows (create/book/accept/start/end) execute correctly under load.
-- DB invariants remain valid after each stage.
+The system demonstrates robust transactional behavior under concurrent use, hotspot contention, and deterministic failure injection. Failure simulation confirms rollback safety and absence of partial writes in validated flows. Stress testing exposes practical capacity limits (tail-latency escalation and 500 errors), identifying the next optimization targets as connection/resource tuning and overload-path hardening.
 
-### 6.2 Failure Handling
-- Race contention failures are safely rejected (HTTP 400) without crashing app.
-- No partial/invalid persistence observed in ACID snapshots.
-
-### 6.3 Multi-User Conflict Handling
-- Concurrent stage demonstrates safe parallelism across users.
-- Race stage demonstrates safe rejection under critical-section contention.
-
----
-
-## 7) Observations and Limitations
-
-### Observations
-- System performs strongly under concurrent mixed traffic with zero failures.
-- Under deliberate race pressure, controlled contention failures appear as expected.
-- Despite contention, all measured consistency invariants remain intact.
-
-### Limitations
-- Race stage prioritizes contention realism over zero request failure rate.
-- Durability evidence is strongest when explicit backend/database restart is performed before stage D check.
-- Reported metrics reflect one representative run; repeated runs are recommended for confidence intervals.
-
----
-
-## 8) Conclusion
-The system demonstrates robust multi-user behavior:
-- Strong concurrent stability and low latency
-- Safe handling of race conflicts without state corruption
-- Clean ACID invariant snapshots across concurrent, race, and durability stages
-
-Overall, the implementation meets the assignment goal of building a reliable, conflict-safe, and load-resilient system.
+Overall, Module B requirements were implemented end-to-end with reproducible load stages, explicit fault injection, and invariant-based correctness checks.

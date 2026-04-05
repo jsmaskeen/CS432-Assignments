@@ -31,6 +31,17 @@ RACE_USERS="${RACE_USERS:-120}"
 RACE_SPAWN="${RACE_SPAWN:-30}"
 RACE_TIME="${RACE_TIME:-2m}"
 
+FAILURE_USERS="${FAILURE_USERS:-120}"
+FAILURE_SPAWN="${FAILURE_SPAWN:-30}"
+FAILURE_TIME="${FAILURE_TIME:-2m}"
+
+STRESS_USERS="${STRESS_USERS:-200}"
+STRESS_SPAWN="${STRESS_SPAWN:-40}"
+STRESS_TIME="${STRESS_TIME:-5m}"
+
+WITH_FAILURE="${WITH_FAILURE:-0}"
+WITH_STRESS="${WITH_STRESS:-0}"
+
 WITH_DURABILITY="${WITH_DURABILITY:-0}"
 RESTART_BACKEND_CMD="${RESTART_BACKEND_CMD:-}"
 
@@ -58,9 +69,11 @@ validate_users() {
 
 validate_users "$CONCURRENT_USERS" "CONCURRENT_USERS"
 validate_users "$RACE_USERS" "RACE_USERS"
+validate_users "$FAILURE_USERS" "FAILURE_USERS"
+validate_users "$STRESS_USERS" "STRESS_USERS"
 
 if [[ "${RESET_DB}" == "1" ]]; then
-  echo "[0/5] Resetting database with clean_database.sh"
+  echo "[0] Resetting database with clean_database.sh"
   if [[ ! -x "${RESET_DB_CMD}" ]]; then
     echo "ERROR: RESET_DB_CMD not executable: ${RESET_DB_CMD}"
     exit 2
@@ -69,7 +82,7 @@ if [[ "${RESET_DB}" == "1" ]]; then
   echo "Database reset complete."
   sleep 5
 else
-  echo "[0/5] Skipping database reset (RESET_DB=${RESET_DB})"
+  echo "[0] Skipping database reset (RESET_DB=${RESET_DB})"
 fi
 
 run_acid_stage() {
@@ -120,7 +133,7 @@ run_locust_stage() {
   fi
 }
 
-echo "[1/5] Running concurrent stage (users=${CONCURRENT_USERS}, spawn=${CONCURRENT_SPAWN}, time=${CONCURRENT_TIME})"
+echo "[1] Running concurrent stage (users=${CONCURRENT_USERS}, spawn=${CONCURRENT_SPAWN}, time=${CONCURRENT_TIME})"
 run_locust_stage "concurrent" "0" -f "${SCRIPT_DIR}/locustfile.py" \
   --host "${HOST}" \
   --tags concurrent \
@@ -128,10 +141,10 @@ run_locust_stage "concurrent" "0" -f "${SCRIPT_DIR}/locustfile.py" \
   --headless \
   --csv "${OUT_DIR}/concurrent_stage"
 
-echo "[2/5] Capturing ACID snapshot after concurrent stage"
+echo "[2] Capturing ACID snapshot after concurrent stage"
 run_acid_stage "stage_b_concurrent" "${OUT_DIR}/acid_stage_b.json"
 
-echo "[3/5] Running race stage (users=${RACE_USERS}, spawn=${RACE_SPAWN}, time=${RACE_TIME})"
+echo "[3] Running race stage (users=${RACE_USERS}, spawn=${RACE_SPAWN}, time=${RACE_TIME})"
 run_locust_stage "race" "1" -f "${SCRIPT_DIR}/locustfile.py" \
   --host "${HOST}" \
   --tags race \
@@ -139,11 +152,41 @@ run_locust_stage "race" "1" -f "${SCRIPT_DIR}/locustfile.py" \
   --headless \
   --csv "${OUT_DIR}/race_stage"
 
-echo "[4/5] Capturing ACID snapshot after race stage"
+echo "[4] Capturing ACID snapshot after race stage"
 run_acid_stage "stage_c_race" "${OUT_DIR}/acid_stage_c.json"
 
+if [[ "${WITH_FAILURE}" == "1" ]]; then
+  echo "[5] Running failure simulation stage (users=${FAILURE_USERS}, spawn=${FAILURE_SPAWN}, time=${FAILURE_TIME})"
+  run_locust_stage "failure" "1" -f "${SCRIPT_DIR}/locustfile.py" \
+    --host "${HOST}" \
+    --tags failure \
+    -u "${FAILURE_USERS}" -r "${FAILURE_SPAWN}" -t "${FAILURE_TIME}" \
+    --headless \
+    --csv "${OUT_DIR}/failure_stage"
+
+  echo "[6] Capturing ACID snapshot after failure stage"
+  run_acid_stage "stage_f_failure" "${OUT_DIR}/acid_stage_f.json"
+else
+  echo "[5] Skipping failure stage (set WITH_FAILURE=1 to enable)"
+fi
+
+if [[ "${WITH_STRESS}" == "1" ]]; then
+  echo "[7] Running stress stage (users=${STRESS_USERS}, spawn=${STRESS_SPAWN}, time=${STRESS_TIME})"
+  run_locust_stage "stress" "1" -f "${SCRIPT_DIR}/locustfile.py" \
+    --host "${HOST}" \
+    --tags stress \
+    -u "${STRESS_USERS}" -r "${STRESS_SPAWN}" -t "${STRESS_TIME}" \
+    --headless \
+    --csv "${OUT_DIR}/stress_stage"
+
+  echo "[8] Capturing ACID snapshot after stress stage"
+  run_acid_stage "stage_s_stress" "${OUT_DIR}/acid_stage_s.json"
+else
+  echo "[7] Skipping stress stage (set WITH_STRESS=1 to enable)"
+fi
+
 if [[ "${WITH_DURABILITY}" == "1" ]]; then
-  echo "[5/5] Durability stage requested"
+  echo "[9] Durability stage requested"
   if [[ -n "${RESTART_BACKEND_CMD}" ]]; then
     echo "Executing backend restart command..."
     eval "${RESTART_BACKEND_CMD}"
@@ -154,7 +197,7 @@ if [[ "${WITH_DURABILITY}" == "1" ]]; then
 
   run_acid_stage "stage_d_post_restart" "${OUT_DIR}/acid_stage_d.json"
 else
-  echo "[5/5] Skipping durability stage (set WITH_DURABILITY=1 to enable)"
+  echo "[9] Skipping durability stage (set WITH_DURABILITY=1 to enable)"
 fi
 
 echo "Pipeline complete. Artifacts: ${OUT_DIR}"

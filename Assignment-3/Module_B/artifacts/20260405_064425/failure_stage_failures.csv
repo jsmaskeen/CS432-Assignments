@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences
+POST,RACE POST /rides/bookings/{booking_id}/accept,CatchResponseError('unexpected status 502'),26

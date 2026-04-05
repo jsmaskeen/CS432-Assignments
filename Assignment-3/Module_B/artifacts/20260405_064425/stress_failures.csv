@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences
+GET,GET /admin/rides/stats,CatchResponseError('unexpected status 500'),2
+POST,POST /rides,HTTPError('500 Server Error: Internal Server Error for url: POST /rides'),15
+POST,POST /rides/{ride_id}/book,CatchResponseError('race-contention book status=409 details: Already booked this ride'),10
+GET,GET /rides/{ride_id},HTTPError('500 Server Error: Internal Server Error for url: GET /rides/{ride_id}'),15
+GET,GET /rides,HTTPError('500 Server Error: Internal Server Error for url: GET /rides'),137
+GET,GET /rides/my/bookings,HTTPError('500 Server Error: Internal Server Error for url: GET /rides/my/bookings'),30
