@@ -200,4 +200,7 @@ else
   echo "[9] Skipping durability stage (set WITH_DURABILITY=1 to enable)"
 fi
 
+echo "[report] Generating markdown summary for ${OUT_DIR}"
+"${PYTHON_BIN}" "${SCRIPT_DIR}/generate_experiment_report.py" --artifact-dir "${OUT_DIR}"
+
 echo "Pipeline complete. Artifacts: ${OUT_DIR}"
