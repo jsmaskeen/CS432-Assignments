@@ -61,7 +61,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db_session)) ->
         audit_event(action="auth.register", status="failed", actor_member_id=None, actor_username=payload.username, details={"reason": "db_conflict"})
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User registration conflict") from exc
 
-    access_token = create_access_token(str(member.MemberID))
+    access_token = create_access_token(
+        str(member.MemberID),
+        username=payload.username,
+        role=assigned_role,
+    )
     logger.info("register.success member_id=%s username=%s", member.MemberID, payload.username)
     audit_event(
         action="auth.register",
@@ -81,7 +85,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db_session)) -> AuthT
         logger.warning("login.failed username=%s", payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
-    token = create_access_token(str(credential.MemberID))
+    token = create_access_token(
+        str(credential.MemberID),
+        username=credential.Username,
+        role=credential.Role,
+    )
     logger.info("login.success member_id=%s username=%s", credential.MemberID, payload.username)
     return AuthTokenResponse(access_token=token)
 

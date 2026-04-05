@@ -12,7 +12,7 @@ from core.audit import setup_audit_logger
 from core.config import settings
 from core.logging_config import setup_logging
 from core.request_context import clear_request_context, set_request_context
-from core.security import decode_access_token
+from core.security import decode_access_token_payload
 from db.session import init_auth_tables
 
 setup_logging(settings.LOG_LEVEL)
@@ -28,18 +28,27 @@ async def log_requests(request: Request, call_next) -> Response:
 	start = time.perf_counter()
 	request_id = str(uuid4())
 	actor_member_id: int | None = None
+	actor_username: str | None = None
+	actor_role: str | None = None
 	auth_header = request.headers.get("authorization", "")
 	if auth_header.lower().startswith("bearer "):
 		token = auth_header.split(" ", 1)[1].strip()
-		subject = decode_access_token(token)
+		payload = decode_access_token_payload(token)
+		subject = payload.get("sub") if payload else None
 		if subject is not None and subject.isdigit():
 			actor_member_id = int(subject)
+			claim_username = payload.get("usr") if payload else None
+			claim_role = payload.get("role") if payload else None
+			if isinstance(claim_username, str):
+				actor_username = claim_username
+			if isinstance(claim_role, str):
+				actor_role = claim_role
 
 	set_request_context(
 		request_id=request_id,
 		actor_member_id=actor_member_id,
-		actor_username=None,
-		actor_role=None,
+		actor_username=actor_username,
+		actor_role=actor_role,
 	)
 	request.state.request_id = request_id
 
