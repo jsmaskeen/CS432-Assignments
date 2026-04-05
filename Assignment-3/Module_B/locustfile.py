@@ -509,6 +509,16 @@ class RaceHostUser(RajakUserBase):
 
         if not ride_id:
             return
+        
+        ride_res = self.client.get(
+            self.api_path(f"/rides/{ride_id}"),
+            headers=self.auth_headers(),
+            name="RACE GET /rides/{ride_id}",
+        )
+        if ride_res.status_code != 200:
+            return
+        if ride_res.json().get("Ride_Status") != "Open":
+            return
 
         pending_res = self.client.get(
             self.api_path(f"/rides/{ride_id}/bookings/pending"),
