@@ -195,7 +195,7 @@ CREATE TABLE `Rides` (
   `Max_Capacity` int NOT NULL,
   `Available_Seats` int NOT NULL,
   `Base_Fare_Per_KM` decimal(8,2) NOT NULL,
-  `Ride_Status` enum('Open','Full','Cancelled','Completed') NOT NULL DEFAULT 'Open',
+  `Ride_Status` enum('Open','Started','Full','Cancelled','Completed') NOT NULL DEFAULT 'Open',
   `Created_At` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`RideID`),
   KEY `Host_MemberID` (`Host_MemberID`),
