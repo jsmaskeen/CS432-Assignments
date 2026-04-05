@@ -1,0 +1,62 @@
+{
+  "stage": "stage_b_concurrent",
+  "timestamp_utc": "2026-04-05T01:17:31.784626+00:00",
+  "checks": {
+    "duplicate_bookings": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "duplicate_participants": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "duplicate_settlements": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "seat_mismatch": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "invalid_seat_bounds": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "invalid_status_vs_seats": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_host_booking": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_host_participant": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_confirmed_participant": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_settlement_for_completed": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "orphan_or_invalid_settlement": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    }
+  },
+  "has_violations": false
+}
