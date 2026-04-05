@@ -8,8 +8,9 @@
   - Jaskirat Singh Maskeen
   - Karan Sagar Gandhi
   - Romit Mohane
-- **GitHub Repository Link:** <ADD_REPO_LINK_HERE>
-- **Video Demonstration Link:** <ADD_VIDEO_LINK_HERE>
+- **GitHub Repository Link:** [GitHub Repo](https://github.com/jsmaskeen/CS432-Assignments)
+- **Video Demonstration Link Module A:** [YouTube Video Module A](https://www.youtube.com/watch?v=kdvVCJADZq4)
+- **Video Demonstration Link Module B:** [YouTube Video Module B](https://youtu.be/UPca4TBWmHw)
 
 ---
 
