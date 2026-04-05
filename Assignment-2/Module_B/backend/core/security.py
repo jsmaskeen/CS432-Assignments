@@ -43,18 +43,31 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, *, username: str | None = None, role: str | None = None) -> str:
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": subject, "exp": expires}
+    if username is not None:
+        payload["usr"] = username
+    if role is not None:
+        payload["role"] = role
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_token_payload(token: str) -> dict[str, object] | None:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        sub = payload.get("sub")
-        if isinstance(sub, str):
-            return sub
+        if isinstance(payload, dict):
+            return payload
         return None
     except JWTError:
         return None
+
+
+def decode_access_token(token: str) -> str | None:
+    payload = decode_access_token_payload(token)
+    if payload is None:
+        return None
+    sub = payload.get("sub")
+    if isinstance(sub, str):
+        return sub
+    return None

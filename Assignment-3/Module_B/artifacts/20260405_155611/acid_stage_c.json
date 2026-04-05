@@ -1,0 +1,72 @@
+{
+  "stage": "stage_c_race",
+  "timestamp_utc": "2026-04-05T10:31:22.086199+00:00",
+  "checks": {
+    "duplicate_bookings": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "duplicate_participants": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "duplicate_settlements": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "seat_mismatch": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "invalid_seat_bounds": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "invalid_status_vs_seats": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_host_booking": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_host_participant": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_confirmed_participant": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "participant_without_confirmed_booking": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "non_confirmed_booking_with_participant": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "missing_settlement_for_completed": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    },
+    "orphan_or_invalid_settlement": {
+      "violations": 0,
+      "rows": [],
+      "truncated": false
+    }
+  },
+  "has_violations": false
+}

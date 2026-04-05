@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences
+POST,RACE POST /rides/{ride_id}/book,CatchResponseError('race-contention race-book status=400 details: Ride is not open for booking'),84

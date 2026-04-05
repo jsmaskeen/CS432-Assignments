@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
 from core.audit import audit_event
+from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km, recalculate_ride_route_and_distances
 from db.session import get_db_session
 from models.booking import Booking
@@ -333,6 +334,8 @@ def accept_booking(
 
     db.flush()
     try:
+        if consume_failure("bookings.accept.post_flush"):
+            raise RuntimeError("Simulated failure at bookings.accept.post_flush")
         updated = recalculate_ride_route_and_distances(ride, db)
     except RuntimeError as exc:
         db.rollback()

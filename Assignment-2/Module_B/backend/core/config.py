@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     ORS_API_KEY: str = ""
     ORS_BASE_URL: str = "https://api.openrouteservice.org"
 
+    DB_POOL_SIZE: int = 30
+    DB_MAX_OVERFLOW: int = 60
+    DB_POOL_TIMEOUT: int = 15
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

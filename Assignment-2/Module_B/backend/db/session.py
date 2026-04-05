@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from uuid import uuid4
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from core.config import settings
@@ -11,46 +11,43 @@ from core.request_context import get_request_context
 class Base(DeclarativeBase):
     pass
 
-engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, pool_pre_ping=True)
+engine = create_engine(
+    settings.SQLALCHEMY_DATABASE_URI,
+    pool_pre_ping=True,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 def get_db_session() -> Generator[Session, None, None]:
     db = SessionLocal()
-    ctx = get_request_context()
-    request_id = ctx.request_id or str(uuid4())
-    actor_member_id = ctx.actor_member_id
-    actor_username = ctx.actor_username
-    actor_role = ctx.actor_role
-
-    if actor_member_id is not None and (actor_username is None or actor_role is None):
-        from models.auth_credential import AuthCredential
-
-        credential = db.scalar(select(AuthCredential).where(AuthCredential.MemberID == actor_member_id))
-        if credential is not None:
-            actor_username = credential.Username
-            actor_role = credential.Role
-
-    db.execute(
-        text(
-            """
-            SET
-                @app_request_id = :request_id,
-                @app_actor_member_id = :actor_member_id,
-                @app_actor_username = :actor_username,
-                @app_actor_role = :actor_role,
-                @app_source = 'api'
-            """
-        ),
-        {
-            "request_id": request_id,
-            "actor_member_id": actor_member_id,
-            "actor_username": actor_username,
-            "actor_role": actor_role,
-        },
-    )
-
     try:
+        ctx = get_request_context()
+        request_id = ctx.request_id or str(uuid4())
+        actor_member_id = ctx.actor_member_id
+        actor_username = ctx.actor_username
+        actor_role = ctx.actor_role
+
+        db.execute(
+            text(
+                """
+                SET
+                    @app_request_id = :request_id,
+                    @app_actor_member_id = :actor_member_id,
+                    @app_actor_username = :actor_username,
+                    @app_actor_role = :actor_role,
+                    @app_source = 'api'
+                """
+            ),
+            {
+                "request_id": request_id,
+                "actor_member_id": actor_member_id,
+                "actor_username": actor_username,
+                "actor_role": actor_role,
+            },
+        )
         yield db
     finally:
         try:

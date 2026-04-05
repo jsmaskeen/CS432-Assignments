@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
+from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km
 from db.session import get_db_session
 from models.booking import Booking
@@ -307,6 +308,12 @@ def end_ride(
         existing = db.scalar(select(CostSettlement).where(CostSettlement.BookingID == booking.BookingID))
         if existing is not None:
             continue
+        if consume_failure("rides.end.before_settlement_insert"):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Simulated failure at rides.end.before_settlement_insert",
+            )
         calculated_cost = (Decimal(booking.Distance_Travelled_KM) * Decimal(ride.Base_Fare_Per_KM)).quantize(Decimal("0.01"))
         settlement = CostSettlement(
             BookingID=booking.BookingID,
