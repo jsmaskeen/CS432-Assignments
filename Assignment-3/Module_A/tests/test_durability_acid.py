@@ -62,6 +62,16 @@ class TestDurabilityACID(unittest.TestCase):
                     "references_column": "MemberID",
                 }
             ],
+            integrity_checks=[
+                {"column": "Host_MemberID", "not_null": True},
+                {"column": "Start_GeoHash", "not_null": True},
+                {"column": "End_GeoHash", "not_null": True},
+                {"column": "Departure_Time", "not_null": True},
+                {"column": "Max_Capacity", "not_null": True, "check": lambda value: value > 0, "message": "Max_Capacity must be > 0"},
+                {"column": "Available_Seats", "not_null": True, "check": lambda value: value >= 0, "message": "Available_Seats must be >= 0"},
+                {"column": "Available_Seats", "check": lambda value, row: value <= row["Max_Capacity"], "message": "Available_Seats cannot exceed Max_Capacity"},
+                {"column": "Start_GeoHash", "check": lambda value, row: value != row["End_GeoHash"], "message": "Start_GeoHash and End_GeoHash must differ"},
+            ],
         )
 
         self.db.create_table(
@@ -90,6 +100,14 @@ class TestDurabilityACID(unittest.TestCase):
                     "references_column": "MemberID",
                     "on_delete": "CASCADE",
                 },
+            ],
+            integrity_checks=[
+                {"column": "RideID", "not_null": True},
+                {"column": "Passenger_MemberID", "not_null": True},
+                {"column": "Booking_Status", "not_null": True},
+                {"column": "Pickup_GeoHash", "not_null": True},
+                {"column": "Drop_GeoHash", "not_null": True},
+                {"column": "Distance_Travelled_KM", "not_null": True, "check": lambda value: value > 0, "message": "Distance_Travelled_KM must be > 0"},
             ],
         )
 
@@ -246,6 +264,16 @@ db.create_table(
             "references_column": "MemberID",
         }
     ],
+    integrity_checks=[
+        {"column": "Host_MemberID", "not_null": True},
+        {"column": "Start_GeoHash", "not_null": True},
+        {"column": "End_GeoHash", "not_null": True},
+        {"column": "Departure_Time", "not_null": True},
+        {"column": "Max_Capacity", "not_null": True, "check": lambda value: value > 0, "message": "Max_Capacity must be > 0"},
+        {"column": "Available_Seats", "not_null": True, "check": lambda value: value >= 0, "message": "Available_Seats must be >= 0"},
+        {"column": "Available_Seats", "check": lambda value, row: value <= row["Max_Capacity"], "message": "Available_Seats cannot exceed Max_Capacity"},
+        {"column": "Start_GeoHash", "check": lambda value, row: value != row["End_GeoHash"], "message": "Start_GeoHash and End_GeoHash must differ"},
+    ],
 )
 
 db.create_table(
@@ -265,6 +293,14 @@ db.create_table(
             "references_column": "MemberID",
             "on_delete": "CASCADE",
         },
+    ],
+    integrity_checks=[
+        {"column": "RideID", "not_null": True},
+        {"column": "Passenger_MemberID", "not_null": True},
+        {"column": "Booking_Status", "not_null": True},
+        {"column": "Pickup_GeoHash", "not_null": True},
+        {"column": "Drop_GeoHash", "not_null": True},
+        {"column": "Distance_Travelled_KM", "not_null": True, "check": lambda value: value > 0, "message": "Distance_Travelled_KM must be > 0"},
     ],
 )
 
@@ -359,6 +395,16 @@ db.create_table(
             "references_column": "MemberID",
         }
     ],
+    integrity_checks=[
+        {"column": "Host_MemberID", "not_null": True},
+        {"column": "Start_GeoHash", "not_null": True},
+        {"column": "End_GeoHash", "not_null": True},
+        {"column": "Departure_Time", "not_null": True},
+        {"column": "Max_Capacity", "not_null": True, "check": lambda value: value > 0, "message": "Max_Capacity must be > 0"},
+        {"column": "Available_Seats", "not_null": True, "check": lambda value: value >= 0, "message": "Available_Seats must be >= 0"},
+        {"column": "Available_Seats", "check": lambda value, row: value <= row["Max_Capacity"], "message": "Available_Seats cannot exceed Max_Capacity"},
+        {"column": "Start_GeoHash", "check": lambda value, row: value != row["End_GeoHash"], "message": "Start_GeoHash and End_GeoHash must differ"},
+    ],
 )
 
 db.create_table(
@@ -378,6 +424,14 @@ db.create_table(
             "references_column": "MemberID",
             "on_delete": "CASCADE",
         },
+    ],
+    integrity_checks=[
+        {"column": "RideID", "not_null": True},
+        {"column": "Passenger_MemberID", "not_null": True},
+        {"column": "Booking_Status", "not_null": True},
+        {"column": "Pickup_GeoHash", "not_null": True},
+        {"column": "Drop_GeoHash", "not_null": True},
+        {"column": "Distance_Travelled_KM", "not_null": True, "check": lambda value: value > 0, "message": "Distance_Travelled_KM must be > 0"},
     ],
 )
 
