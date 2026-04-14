@@ -1,0 +1,599 @@
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from sqlalchemy import func, MetaData, Table, delete, insert, inspect, select, update
+from sqlalchemy.orm import Session
+
+from api.dependencies import get_current_admin_credential
+from core.audit import audit_event
+from core.config import settings
+from db.session import get_db_session
+from models.auth_credential import AuthCredential
+from models.booking import Booking
+from models.chat_message import RideChatMessage
+from models.member import Member
+from models.ride import Ride
+from schemas.admin import (
+    AdminMemberReadResponse,
+    AdminMemberRoleUpdateRequest,
+    AdminRideParticipantResponse,
+    AdminRideReadResponse,
+    AdminRideStatsResponse,
+    AuditLogReadResponse,
+    UnauthorizedDbModificationReadResponse,
+)
+from schemas.chat import ChatReadResponse
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger("rajak.admin")
+
+
+def _get_table(table_name: str, db: Session) -> Table:
+    inspector = inspect(db.bind)
+    table_names = inspector.get_table_names()
+    if table_name not in table_names:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+    return Table(table_name, MetaData(), autoload_with=db.bind)
+
+
+def _get_single_pk_column(table: Table) -> str:
+    pk_columns = [col.name for col in table.primary_key.columns]
+    if len(pk_columns) != 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Table must have a single primary key")
+    return pk_columns[0]
+
+
+@router.get("/members", response_model=list[AdminMemberReadResponse])
+def list_members(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminMemberReadResponse]:
+    stmt = select(Member, AuthCredential).join(AuthCredential, AuthCredential.MemberID == Member.MemberID).order_by(Member.MemberID.asc())
+    rows = db.execute(stmt).all()
+    return [
+        AdminMemberReadResponse(
+            member_id=member.MemberID,
+            username=credential.Username,
+            role=credential.Role,
+            email=member.Email,
+            full_name=member.Full_Name,
+            reputation_score=float(member.Reputation_Score),
+            phone_number=member.Phone_Number,
+            gender=member.Gender,
+            created_at=member.Created_At,
+        )
+        for member, credential in rows
+    ]
+
+
+@router.patch("/members/{member_id}/role", response_model=AdminMemberReadResponse)
+def update_member_role(
+    member_id: int,
+    payload: AdminMemberRoleUpdateRequest,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> AdminMemberReadResponse:
+    credential = db.scalar(select(AuthCredential).where(AuthCredential.MemberID == member_id))
+    member = db.scalar(select(Member).where(Member.MemberID == member_id))
+    if credential is None or member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+
+    if credential.MemberID == admin_credential.MemberID and payload.role != "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot demote your own admin account")
+
+    credential.Role = payload.role
+    db.commit()
+
+    audit_event(
+        action="admin.member.role_update",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"target_member_id": member_id, "new_role": payload.role},
+    )
+
+    return AdminMemberReadResponse(
+        member_id=member.MemberID,
+        username=credential.Username,
+        role=credential.Role,
+        email=member.Email,
+        full_name=member.Full_Name,
+        reputation_score=float(member.Reputation_Score),
+        phone_number=member.Phone_Number,
+        gender=member.Gender,
+        created_at=member.Created_At,
+    )
+
+
+@router.get("/rides/stats", response_model=AdminRideStatsResponse)
+def ride_stats(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> AdminRideStatsResponse:
+    total_members = db.scalar(select(func.count(Member.MemberID))) or 0
+    total_rides = db.scalar(select(func.count(Ride.RideID))) or 0
+
+    open_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Open")) or 0
+    full_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Full")) or 0
+    cancelled_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Cancelled")) or 0
+    completed_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Completed")) or 0
+
+    total_bookings = db.scalar(select(func.count(Booking.BookingID))) or 0
+    pending_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Pending")) or 0
+    confirmed_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Confirmed")) or 0
+    rejected_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Rejected")) or 0
+    cancelled_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Cancelled")) or 0
+
+    total_capacity_seats = db.scalar(select(func.coalesce(func.sum(Ride.Max_Capacity), 0))) or 0
+    total_available_seats = db.scalar(select(func.coalesce(func.sum(Ride.Available_Seats), 0))) or 0
+    total_booked_seats = max(0, int(total_capacity_seats) - int(total_available_seats))
+
+    average_base_fare = db.scalar(select(func.coalesce(func.avg(Ride.Base_Fare_Per_KM), 0))) or 0
+
+    return AdminRideStatsResponse(
+        total_members=int(total_members),
+        total_rides=int(total_rides),
+        open_rides=int(open_rides),
+        full_rides=int(full_rides),
+        cancelled_rides=int(cancelled_rides),
+        completed_rides=int(completed_rides),
+        total_bookings=int(total_bookings),
+        pending_bookings=int(pending_bookings),
+        confirmed_bookings=int(confirmed_bookings),
+        rejected_bookings=int(rejected_bookings),
+        cancelled_bookings=int(cancelled_bookings),
+        total_capacity_seats=int(total_capacity_seats),
+        total_available_seats=int(total_available_seats),
+        total_booked_seats=total_booked_seats,
+        average_base_fare_per_km=float(average_base_fare),
+    )
+
+
+@router.get("/audit-logs", response_model=list[AuditLogReadResponse])
+def read_audit_logs(
+    limit: int = Query(default=200, ge=1, le=2000),
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+) -> list[AuditLogReadResponse]:
+    path = Path(settings.AUDIT_LOG_FILE)
+    if not path.exists():
+        return []
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    selected = lines[-limit:]
+
+    parsed: list[AuditLogReadResponse] = []
+    for line in reversed(selected):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        parsed.append(
+            AuditLogReadResponse(
+                ts=str(obj.get("ts", "")),
+                request_id=obj.get("request_id"),
+                action=str(obj.get("action", "unknown")),
+                status=str(obj.get("status", "unknown")),
+                actor_member_id=obj.get("actor_member_id"),
+                actor_username=obj.get("actor_username"),
+                details=obj.get("details") if isinstance(obj.get("details"), dict) else {},
+            )
+        )
+
+    audit_event(
+        action="admin.audit.read",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"limit": limit, "returned": len(parsed)},
+    )
+    return parsed
+
+
+@router.get("/rides/active", response_model=list[AdminRideReadResponse])
+def list_active_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Started").order_by(Ride.Departure_Time.asc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/open", response_model=list[AdminRideReadResponse])
+def list_open_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Open").order_by(Ride.Departure_Time.asc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/completed", response_model=list[AdminRideReadResponse])
+def list_completed_rides(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideReadResponse]:
+    stmt = select(Ride).where(Ride.Ride_Status == "Completed").order_by(Ride.Departure_Time.desc())
+    rides = list(db.scalars(stmt))
+    return [
+        AdminRideReadResponse(
+            ride_id=ride.RideID,
+            host_member_id=ride.Host_MemberID,
+            start_geohash=ride.Start_GeoHash,
+            end_geohash=ride.End_GeoHash,
+            departure_time=ride.Departure_Time,
+            vehicle_type=ride.Vehicle_Type,
+            max_capacity=ride.Max_Capacity,
+            available_seats=ride.Available_Seats,
+            base_fare_per_km=float(ride.Base_Fare_Per_KM),
+            ride_status=ride.Ride_Status,
+            created_at=ride.Created_At,
+        )
+        for ride in rides
+    ]
+
+
+@router.get("/rides/{ride_id}/participants", response_model=list[AdminRideParticipantResponse])
+def list_ride_participants(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[AdminRideParticipantResponse]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    participants: list[AdminRideParticipantResponse] = []
+    host = db.scalar(select(Member).where(Member.MemberID == ride.Host_MemberID))
+    if host is not None:
+        participants.append(
+            AdminRideParticipantResponse(
+                member_id=host.MemberID,
+                full_name=host.Full_Name,
+                email=host.Email,
+                phone_number=host.Phone_Number,
+                gender=host.Gender,
+                is_host=True,
+                booking_id=None,
+                booking_status=None,
+            )
+        )
+
+    stmt = (
+        select(Booking, Member)
+        .join(Member, Member.MemberID == Booking.Passenger_MemberID)
+        .where(
+            Booking.RideID == ride_id,
+            Booking.Booking_Status == "Confirmed",
+            Booking.Passenger_MemberID != ride.Host_MemberID,
+        )
+        .order_by(Booking.Booked_At.asc())
+    )
+    for booking, member in db.execute(stmt).all():
+        participants.append(
+            AdminRideParticipantResponse(
+                member_id=member.MemberID,
+                full_name=member.Full_Name,
+                email=member.Email,
+                phone_number=member.Phone_Number,
+                gender=member.Gender,
+                is_host=False,
+                booking_id=booking.BookingID,
+                booking_status=booking.Booking_Status,
+            )
+        )
+
+    audit_event(
+        action="admin.ride.participants",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id, "participants": len(participants)},
+    )
+    return participants
+
+
+@router.get("/rides/{ride_id}/chats", response_model=list[ChatReadResponse])
+def list_ride_chats(
+    ride_id: int,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[ChatReadResponse]:
+    ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
+    if ride is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+
+    stmt = select(RideChatMessage).where(RideChatMessage.RideID == ride_id).order_by(RideChatMessage.Sent_At.asc())
+    messages = list(db.scalars(stmt))
+    member_ids = {message.Sender_MemberID for message in messages}
+    members = {
+        member.MemberID: member
+        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+    }
+    response: list[ChatReadResponse] = []
+    for message in messages:
+        member = members.get(message.Sender_MemberID)
+        response.append(
+            ChatReadResponse(
+                MessageID=message.MessageID,
+                RideID=message.RideID,
+                Sender_MemberID=message.Sender_MemberID,
+                Sender_Name=member.Full_Name if member else None,
+                Message_Body=message.Message_Body,
+                Sent_At=message.Sent_At,
+            )
+        )
+    audit_event(
+        action="admin.ride.chats",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"ride_id": ride_id, "messages": len(messages)},
+    )
+    return response
+
+
+@router.get("/db-audit/unauthorized", response_model=list[UnauthorizedDbModificationReadResponse])
+def list_unauthorized_db_modifications(
+    limit: int = Query(default=200, ge=1, le=2000),
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[UnauthorizedDbModificationReadResponse]:
+    table = _get_table("audit_modification_log", db)
+    required_columns = {
+        "log_id",
+        "table_name",
+        "operation",
+        "primary_key_name",
+        "primary_key_value",
+        "db_user",
+        "connection_id",
+        "app_request_id",
+        "app_actor_member_id",
+        "app_actor_username",
+        "app_actor_role",
+        "source_tag",
+        "is_authorized",
+        "old_values_json",
+        "new_values_json",
+        "created_at",
+    }
+    existing_columns = {col.name for col in table.columns}
+    missing = required_columns - existing_columns
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"audit_modification_log missing columns: {', '.join(sorted(missing))}",
+        )
+
+    stmt = (
+        select(table)
+        .where(table.c.is_authorized == 0)
+        .order_by(table.c.log_id.desc())
+        .limit(limit)
+    )
+    rows = list(db.execute(stmt).mappings().all())
+
+    parsed_rows: list[UnauthorizedDbModificationReadResponse] = []
+    for row in rows:
+        old_values = row["old_values_json"]
+        new_values = row["new_values_json"]
+        if isinstance(old_values, str):
+            try:
+                old_values = json.loads(old_values)
+            except json.JSONDecodeError:
+                old_values = None
+        if isinstance(new_values, str):
+            try:
+                new_values = json.loads(new_values)
+            except json.JSONDecodeError:
+                new_values = None
+
+        parsed_rows.append(
+            UnauthorizedDbModificationReadResponse(
+                log_id=int(row["log_id"]),
+                table_name=str(row["table_name"]),
+                operation=str(row["operation"]),
+                primary_key_name=str(row["primary_key_name"]),
+                primary_key_value=str(row["primary_key_value"]),
+                db_user=str(row["db_user"]),
+                connection_id=int(row["connection_id"]),
+                app_request_id=row["app_request_id"],
+                app_actor_member_id=row["app_actor_member_id"],
+                app_actor_username=row["app_actor_username"],
+                app_actor_role=row["app_actor_role"],
+                source_tag=str(row["source_tag"]),
+                is_authorized=bool(row["is_authorized"]),
+                old_values_json=old_values if isinstance(old_values, dict) else None,
+                new_values_json=new_values if isinstance(new_values, dict) else None,
+                created_at=row["created_at"],
+            )
+        )
+
+    audit_event(
+        action="admin.db_audit.unauthorized_read",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"limit": limit, "returned": len(parsed_rows)},
+    )
+    return parsed_rows
+
+
+@router.get("/db-audit/unauthorized/summary")
+def unauthorized_db_modification_summary(
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[dict[str, Any]]:
+    table = _get_table("audit_modification_log", db)
+    stmt = (
+        select(
+            table.c.table_name,
+            table.c.operation,
+            func.count().label("total"),
+        )
+        .where(table.c.is_authorized == 0)
+        .group_by(table.c.table_name, table.c.operation)
+        .order_by(func.count().desc(), table.c.table_name.asc(), table.c.operation.asc())
+    )
+    rows = list(db.execute(stmt).mappings().all())
+    summary = [
+        {
+            "table_name": str(row["table_name"]),
+            "operation": str(row["operation"]),
+            "total": int(row["total"]),
+        }
+        for row in rows
+    ]
+    audit_event(
+        action="admin.db_audit.unauthorized_summary",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"rows": len(summary)},
+    )
+    return summary
+
+
+@router.get("/tables")
+def list_tables(
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[str]:
+    inspector = inspect(db.bind)
+    return sorted(inspector.get_table_names())
+
+
+@router.get("/tables/{table_name}")
+def read_table(
+    table_name: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    _: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> list[dict[str, Any]]:
+    table = _get_table(table_name, db)
+    stmt = select(table).limit(limit).offset(offset)
+    return list(db.execute(stmt).mappings().all())
+
+
+@router.post("/tables/{table_name}")
+def insert_row(
+    table_name: str,
+    payload: dict[str, Any] = Body(...),
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload is required")
+    table = _get_table(table_name, db)
+    stmt = insert(table).values(**payload)
+    result = db.execute(stmt)
+    db.commit()
+    audit_event(
+        action="admin.table.insert",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"table": table_name, "rowcount": result.rowcount},
+    )
+    return {"inserted": result.rowcount, "id": result.lastrowid}
+
+
+@router.patch("/tables/{table_name}/{pk}")
+def update_row(
+    table_name: str,
+    pk: str,
+    payload: dict[str, Any] = Body(...),
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload is required")
+    table = _get_table(table_name, db)
+    pk_column_name = _get_single_pk_column(table)
+    if pk_column_name in payload:
+        payload = {key: value for key, value in payload.items() if key != pk_column_name}
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    pk_column = table.c[pk_column_name]
+    stmt = update(table).where(pk_column == pk).values(**payload)
+    result = db.execute(stmt)
+    if result.rowcount == 0:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found")
+
+    db.commit()
+    audit_event(
+        action="admin.table.update",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"table": table_name, "rowcount": result.rowcount},
+    )
+    return {"updated": result.rowcount}
+
+
+@router.delete("/tables/{table_name}/{pk}")
+def delete_row(
+    table_name: str,
+    pk: str,
+    admin_credential: AuthCredential = Depends(get_current_admin_credential),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    table = _get_table(table_name, db)
+    pk_column_name = _get_single_pk_column(table)
+    pk_column = table.c[pk_column_name]
+    stmt = delete(table).where(pk_column == pk)
+    result = db.execute(stmt)
+    if result.rowcount == 0:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found")
+
+    db.commit()
+    audit_event(
+        action="admin.table.delete",
+        status="success",
+        actor_member_id=admin_credential.MemberID,
+        actor_username=admin_credential.Username,
+        details={"table": table_name, "rowcount": result.rowcount},
+    )
+    return {"deleted": result.rowcount}
