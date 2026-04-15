@@ -1,8 +1,8 @@
-CREATE DATABASE  IF NOT EXISTS `cabSharing` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `cabSharing`;
+CREATE DATABASE  IF NOT EXISTS `Datahoarders` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `Datahoarders`;
 -- MySQL dump 10.13  Distrib 8.0.36, for Linux (x86_64)
 --
--- Host: localhost    Database: cabSharing
+-- Host: localhost    Database: Datahoarders
 -- ------------------------------------------------------
 -- Server version	8.0.45-0ubuntu0.24.04.1
 
