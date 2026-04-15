@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Generator
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,6 +12,7 @@ from core.audit import audit_event
 from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km
 from db.session import get_db_session
+from db.sharding import SHARD_SESSION_MAKERS, shard_id_for_ride_id
 from models.booking import Booking
 from models.auth_credential import AuthCredential
 from models.ride_participant import RideParticipant
@@ -22,6 +24,15 @@ from schemas.ride import RideCreateRequest, RideReadResponse, RideUpdateRequest,
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 logger = logging.getLogger("rajak.rides")
+
+
+def get_shard_session_for_ride(ride_id: int):
+    shard_id = shard_id_for_ride_id(ride_id)
+    db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @router.get("", response_model=list[RideReadResponse])
@@ -42,7 +53,7 @@ def list_rides(
 @router.get("/{ride_id}", response_model=RideReadResponse)
 def get_ride(
     ride_id: int,
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> Ride:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -162,7 +173,7 @@ def update_ride(
     ride_id: int,
     payload: RideUpdateRequest,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> Ride:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -265,7 +276,7 @@ def start_ride(
 def get_ride_with_bookings(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> RideWithBookingsResponse:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
