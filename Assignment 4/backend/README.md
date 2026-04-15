@@ -23,6 +23,14 @@ FastAPI + SQLAlchemy backend with username/password JWT auth and ride booking AP
 6. Run app:
     - `uvicorn main:app --reload`
 
+## Cleanup Without mysql CLI
+
+If `mysql` command is not installed locally, use:
+- `uv run python -m scripts.cleanup_db`
+
+Optional:
+- `uv run python -m scripts.cleanup_db --skip-auth-truncate`
+
 ## Docs
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
@@ -56,3 +64,24 @@ FastAPI + SQLAlchemy backend with username/password JWT auth and ride booking AP
 - `POST /api/v1/rides`
 - `POST /api/v1/rides/{ride_id}/book`
 - `GET /api/v1/rides/my/bookings`
+
+## Sharding (Assignment 4)
+
+- Configure shard settings in `.env`:
+    - `SHARD_SHARED_HOST`, `SHARD_1_PORT`, `SHARD_2_PORT`, `SHARD_3_PORT`
+    - `SHARD_DB_USER`, `SHARD_DB_PASSWORD`, `SHARD_DB_NAME`
+- TO check most used attribute to choose a shard key:
+    - `python scripts/shard_key.py`
+- Migration script for ride-centric tables:
+    - Dry run: `python scripts/migrate_rides_to_shards.py --dry-run`
+    - Execute: `python scripts/migrate_rides_to_shards.py`
+    - Note: script also mirrors required `Members` rows into each shard so FK checks on `Rides`/`Bookings`/`Ride_Chat` succeed.
+- Fake data generator (to populate empty DB quickly):
+    - `python -m scripts.generate_fake_data --rides 120 --members 80`
+    - Fresh reset + generate: `python -m scripts.generate_fake_data --reset-ride-data --rides 120 --members 80`
+- Validation script (no-loss/no-dup checks):
+    - `python scripts/validate_shard_migration.py`
+- Sharding verification endpoints (admin token required):
+    - `GET /api/v1/testing/sharding/ride/{ride_id}`
+    - `GET /api/v1/testing/sharding/rides/range?start_ride_id=1&end_ride_id=50`
+    - `GET /api/v1/testing/sharding/distribution`
