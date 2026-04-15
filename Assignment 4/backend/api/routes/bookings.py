@@ -10,6 +10,7 @@ from core.audit import audit_event
 from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km, recalculate_ride_route_and_distances
 from db.session import get_db_session
+from db.sharding import SHARD_SESSION_MAKERS, shard_id_for_ride_id
 from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
@@ -20,12 +21,26 @@ router = APIRouter(prefix="/rides", tags=["bookings"])
 logger = logging.getLogger("rajak.bookings")
 
 
+def get_shard_session_for_ride(ride_id: int):
+    shard_id = shard_id_for_ride_id(ride_id)
+    db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _resolve_booking_ride_id(booking_id: int, primary_db: Session) -> int | None:
+    booking = primary_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+    return booking.RideID if booking else None
+
+
 @router.post("/{ride_id}/book", response_model=BookingReadResponse, status_code=status.HTTP_201_CREATED)
 def create_booking(
     ride_id: int,
     payload: BookingCreateRequest,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> Booking:
     logger.info("bookings.create.attempt ride_id=%s member_id=%s", ride_id, current_member.MemberID)
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
@@ -153,7 +168,7 @@ def my_bookings(current_member: Member = Depends(get_current_member), db: Sessio
 def list_pending_bookings(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> list[Booking]:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -199,7 +214,7 @@ def list_pending_bookings(
 def list_confirmed_booking_stops(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> list[Booking]:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -239,146 +254,173 @@ def list_confirmed_booking_stops(
 def delete_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    primary_db: Session = Depends(get_db_session),
 ) -> dict[str, str]:
-    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
-    if booking is None:
+    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
+    if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-    if booking.Passenger_MemberID != current_member.MemberID:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
 
-    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
-    if ride is not None and ride.Host_MemberID == booking.Passenger_MemberID:
-        if ride.Ride_Status in {"Started", "Completed"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete a ride that has started or completed",
+    shard_id = shard_id_for_ride_id(ride_id)
+    shard_db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+        if booking is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+        if booking.Passenger_MemberID != current_member.MemberID:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own booking")
+
+        ride = shard_db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+        if ride is not None and ride.Host_MemberID == booking.Passenger_MemberID:
+            if ride.Ride_Status in {"Started", "Completed"}:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot delete a ride that has started or completed",
+                )
+            shard_db.delete(ride)
+            shard_db.commit()
+            audit_event(
+                action="rides.delete",
+                status="success",
+                actor_member_id=current_member.MemberID,
+                actor_username=None,
+                details={"ride_id": ride.RideID, "trigger": "host_booking_delete"},
             )
-        db.delete(ride)
-        db.commit()
+            return {"message": "Ride deleted"}
+
+        participant = shard_db.scalar(
+            select(RideParticipant).where(
+                RideParticipant.RideID == booking.RideID,
+                RideParticipant.MemberID == booking.Passenger_MemberID,
+                RideParticipant.Role == "Passenger",
+            )
+        )
+        shard_db.delete(booking)
+        if participant is not None:
+            shard_db.delete(participant)
+        if ride is not None:
+            ride.Available_Seats += 1
+            if ride.Ride_Status == "Full":
+                ride.Ride_Status = "Open"
+
+        shard_db.commit()
         audit_event(
-            action="rides.delete",
+            action="bookings.delete",
             status="success",
             actor_member_id=current_member.MemberID,
             actor_username=None,
-            details={"ride_id": ride.RideID, "trigger": "host_booking_delete"},
+            details={"booking_id": booking_id, "ride_id": booking.RideID},
         )
-        return {"message": "Ride deleted"}
-
-    participant = db.scalar(
-        select(RideParticipant).where(
-            RideParticipant.RideID == booking.RideID,
-            RideParticipant.MemberID == booking.Passenger_MemberID,
-            RideParticipant.Role == "Passenger",
-        )
-    )
-    db.delete(booking)
-    if participant is not None:
-        db.delete(participant)
-    if ride is not None:
-        ride.Available_Seats += 1
-        if ride.Ride_Status == "Full":
-            ride.Ride_Status = "Open"
-
-    db.commit()
-    audit_event(
-        action="bookings.delete",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"booking_id": booking_id, "ride_id": booking.RideID},
-    )
-    return {"message": "Booking deleted"}
+        return {"message": "Booking deleted"}
+    finally:
+        shard_db.close()
 
 
 @router.post("/bookings/{booking_id}/accept", response_model=BookingReadResponse)
 def accept_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    primary_db: Session = Depends(get_db_session),
 ) -> Booking:
-    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
-    if booking is None:
+    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
+    if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
-    if ride is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
-    if ride.Host_MemberID != current_member.MemberID:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can accept bookings")
-    if booking.Booking_Status != "Pending":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
-    if ride.Ride_Status != "Open":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not open for booking")
-    if ride.Available_Seats <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No seats available")
-
-    booking.Booking_Status = "Confirmed"
-    ride.Available_Seats -= 1
-    if ride.Available_Seats == 0:
-        ride.Ride_Status = "Full"
-
-    participant = db.scalar(
-        select(RideParticipant).where(
-            RideParticipant.RideID == ride.RideID,
-            RideParticipant.MemberID == booking.Passenger_MemberID,
-        )
-    )
-    if participant is None:
-        participant = RideParticipant(
-            RideID=ride.RideID,
-            MemberID=booking.Passenger_MemberID,
-            Role="Passenger",
-        )
-        db.add(participant)
-
-    db.flush()
+    shard_id = shard_id_for_ride_id(ride_id)
+    shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
-        if consume_failure("bookings.accept.post_flush"):
-            raise RuntimeError("Simulated failure at bookings.accept.post_flush")
-        updated = recalculate_ride_route_and_distances(ride, db)
-    except RuntimeError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+        if booking is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    db.commit()
-    db.refresh(booking)
-    audit_event(
-        action="bookings.accept",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"booking_id": booking.BookingID, "ride_id": ride.RideID, "distances_updated": updated},
-    )
-    return booking
+        ride = shard_db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+        if ride is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+        if ride.Host_MemberID != current_member.MemberID:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can accept bookings")
+        if booking.Booking_Status != "Pending":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
+        if ride.Ride_Status != "Open":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ride is not open for booking")
+        if ride.Available_Seats <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No seats available")
+
+        booking.Booking_Status = "Confirmed"
+        ride.Available_Seats -= 1
+        if ride.Available_Seats == 0:
+            ride.Ride_Status = "Full"
+
+        participant = shard_db.scalar(
+            select(RideParticipant).where(
+                RideParticipant.RideID == ride.RideID,
+                RideParticipant.MemberID == booking.Passenger_MemberID,
+            )
+        )
+        if participant is None:
+            participant = RideParticipant(
+                RideID=ride.RideID,
+                MemberID=booking.Passenger_MemberID,
+                Role="Passenger",
+            )
+            shard_db.add(participant)
+
+        shard_db.flush()
+        try:
+            if consume_failure("bookings.accept.post_flush"):
+                raise RuntimeError("Simulated failure at bookings.accept.post_flush")
+            updated = recalculate_ride_route_and_distances(ride, shard_db)
+        except RuntimeError as exc:
+            shard_db.rollback()
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+        shard_db.commit()
+        shard_db.refresh(booking)
+        audit_event(
+            action="bookings.accept",
+            status="success",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"booking_id": booking.BookingID, "ride_id": ride.RideID, "distances_updated": updated},
+        )
+        return booking
+    finally:
+        shard_db.close()
 
 
 @router.post("/bookings/{booking_id}/reject", response_model=BookingReadResponse)
 def reject_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    primary_db: Session = Depends(get_db_session),
 ) -> Booking:
-    booking = db.scalar(select(Booking).where(Booking.BookingID == booking_id))
-    if booking is None:
+    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
+    if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    ride = db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
-    if ride is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
-    if ride.Host_MemberID != current_member.MemberID:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can reject bookings")
-    if booking.Booking_Status != "Pending":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
+    shard_id = shard_id_for_ride_id(ride_id)
+    shard_db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+        if booking is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    booking.Booking_Status = "Rejected"
-    db.commit()
-    db.refresh(booking)
-    audit_event(
-        action="bookings.reject",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={"booking_id": booking.BookingID, "ride_id": ride.RideID},
-    )
-    return booking
+        ride = shard_db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+        if ride is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ride not found")
+        if ride.Host_MemberID != current_member.MemberID:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the host can reject bookings")
+        if booking.Booking_Status != "Pending":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking is not pending")
+
+        booking.Booking_Status = "Rejected"
+        shard_db.commit()
+        shard_db.refresh(booking)
+        audit_event(
+            action="bookings.reject",
+            status="success",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={"booking_id": booking.BookingID, "ride_id": ride.RideID},
+        )
+        return booking
+    finally:
+        shard_db.close()

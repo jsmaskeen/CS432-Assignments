@@ -19,10 +19,11 @@ Endpoints to Refactor:
   - [x] `PATCH /api/v1/rides/{ride_id}` : write to shard
   - [x] `GET /api/v1/rides/{ride_id}/with-bookings` : read from shard
   
-- [ ] Booking endpoints
-  - [ ] `POST /api/v1/rides/{ride_id}/book` : write to shard
-  - [ ] `GET /api/v1/bookings/{booking_id}` : resolve via Rides.RideID : shard
-  - [ ] `PATCH /api/v1/bookings/{booking_id}` : write to shard
+- [x] Booking endpoints (core operations)
+  - [x] `POST /api/v1/rides/{ride_id}/book` : write to shard
+  - [x] `DELETE /api/v1/bookings/{booking_id}` : resolve via Rides.RideID : shard
+  - [x] `POST /api/v1/bookings/{booking_id}/accept` : resolve via Rides.RideID : shard
+  - [x] `POST /api/v1/bookings/{booking_id}/reject` : resolve via Rides.RideID : shard
   
 - [ ] Chat endpoints
   - [ ] `POST /api/v1/rides/{ride_id}/messages` : write to shard

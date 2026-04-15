@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Generator
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
