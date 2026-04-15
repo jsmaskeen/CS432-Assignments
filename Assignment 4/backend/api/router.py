@@ -9,6 +9,7 @@ from api.routes.preferences import router as preferences_router
 from api.routes.reviews import router as reviews_router
 from api.routes.rides import router as rides_router
 from api.routes.saved_addresses import router as saved_addresses_router
+from api.routes.sharding import router as sharding_router
 from api.routes.settlements import router as settlements_router
 from api.routes.testing import router as testing_router
 
@@ -24,3 +25,4 @@ api_router.include_router(settlements_router)
 api_router.include_router(chat_router)
 api_router.include_router(saved_addresses_router)
 api_router.include_router(testing_router)
+api_router.include_router(sharding_router)
