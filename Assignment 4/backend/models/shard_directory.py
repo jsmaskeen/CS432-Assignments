@@ -20,6 +20,22 @@ class RideShardDirectory(Base):
     Created_At: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
+class RideShardRangeDirectory(Base):
+    __tablename__ = "Ride_Shard_Range_Directory"
+    __table_args__ = (
+        CheckConstraint("MinRideID > 0", name="Ride_Shard_Range_Directory_chk_min_positive"),
+        CheckConstraint("MaxRideID IS NULL OR MaxRideID >= MinRideID", name="Ride_Shard_Range_Directory_chk_max"),
+        CheckConstraint("ShardID in (0,1,2)", name="Ride_Shard_Range_Directory_chk_shard"),
+    )
+
+    RangeID: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    MinRideID: Mapped[int] = mapped_column(nullable=False)
+    MaxRideID: Mapped[int | None] = mapped_column(nullable=True)
+    ShardID: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    Strategy: Mapped[str] = mapped_column(String(50), nullable=False, default="ride_id_range_directory")
+    Created_At: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
 class ReviewShardDirectory(Base):
     __tablename__ = "Review_Shard_Directory"
     __table_args__ = (
