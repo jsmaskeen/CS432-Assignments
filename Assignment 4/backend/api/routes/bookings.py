@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -158,10 +159,31 @@ def create_booking(
 
 
 @router.get("/my/bookings", response_model=list[BookingReadResponse])
-def my_bookings(current_member: Member = Depends(get_current_member), db: Session = Depends(get_db_session)) -> list[Booking]:
+def my_bookings(current_member: Member = Depends(get_current_member)) -> list[Booking]:
     logger.info("bookings.my.list member_id=%s", current_member.MemberID)
-    stmt = select(Booking).where(Booking.Passenger_MemberID == current_member.MemberID).order_by(Booking.Booked_At.desc())
-    return list(db.scalars(stmt))
+    shard_ids = sorted(SHARD_SESSION_MAKERS.keys())
+
+    def _fetch_member_bookings_for_shard(shard_id: int) -> list[Booking]:
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            stmt = (
+                select(Booking)
+                .where(Booking.Passenger_MemberID == current_member.MemberID)
+                .order_by(Booking.Booked_At.desc(), Booking.BookingID.desc())
+            )
+            return list(shard_db.scalars(stmt))
+        finally:
+            shard_db.close()
+
+    bookings: list[Booking] = []
+    max_workers = max(1, len(shard_ids))
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bookings-my-shard") as executor:
+        futures = [executor.submit(_fetch_member_bookings_for_shard, shard_id) for shard_id in shard_ids]
+        for future in futures:
+            bookings.extend(future.result())
+
+    bookings.sort(key=lambda booking: (booking.Booked_At, booking.BookingID), reverse=True)
+    return bookings
 
 
 @router.get("/{ride_id}/bookings/pending", response_model=list[BookingReadResponse])

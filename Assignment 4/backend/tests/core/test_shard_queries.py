@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from core import shard_queries
 from models.booking import Booking
@@ -15,7 +16,11 @@ from models.ride import Ride
 def _make_sqlite_shard_session_makers() -> dict[int, sessionmaker]:
     session_makers: dict[int, sessionmaker] = {}
     for shard_id in (0, 1, 2):
-        engine = create_engine("sqlite+pysqlite:///:memory:")
+        engine = create_engine(
+            "sqlite+pysqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         Member.__table__.create(bind=engine, checkfirst=True)
         Ride.__table__.create(bind=engine, checkfirst=True)
         Booking.__table__.create(bind=engine, checkfirst=True)
