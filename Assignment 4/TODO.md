@@ -37,13 +37,13 @@ Endpoints to Refactor:
   - [ ] Rides-related settlement operations : route via RideID
 
 Multi-Shard Operations:
-- [ ] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
+- [x] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
 - [ ] Range queries : cross-shard aggregation
 
 > Extract and generalize multi-shard fan-out + merge logic into reusable utilities.
 
 Utilities to Create:
-- [ ] `list_rides_across_shards(filter, sort)` : queries all 3 shards, merges results
+- [x] `list_rides_across_shards(filter, sort)` : queries all 3 shards, merges results
 - [ ] `list_bookings_by_ride_range(start_ride_id, end_ride_id)` : cross-shard aggregation
 - [ ] Generic merge/dedup helper for common operations
 - [ ] Integrate into main endpoints (e.g., `GET /rides` route)

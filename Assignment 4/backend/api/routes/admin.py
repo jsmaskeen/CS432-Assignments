@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from api.dependencies import get_current_admin_credential
 from core.audit import audit_event
 from core.config import settings
+from core.shard_queries import aggregate_ride_booking_stats_across_shards, list_rides_across_shards
 from db.session import get_db_session
 from models.auth_credential import AuthCredential
 from models.booking import Booking
@@ -44,6 +45,22 @@ def _get_single_pk_column(table: Table) -> str:
     if len(pk_columns) != 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Table must have a single primary key")
     return pk_columns[0]
+
+
+def _to_admin_ride_read_response(ride: Ride) -> AdminRideReadResponse:
+    return AdminRideReadResponse(
+        ride_id=ride.RideID,
+        host_member_id=ride.Host_MemberID,
+        start_geohash=ride.Start_GeoHash,
+        end_geohash=ride.End_GeoHash,
+        departure_time=ride.Departure_Time,
+        vehicle_type=ride.Vehicle_Type,
+        max_capacity=ride.Max_Capacity,
+        available_seats=ride.Available_Seats,
+        base_fare_per_km=float(ride.Base_Fare_Per_KM),
+        ride_status=ride.Ride_Status,
+        created_at=ride.Created_At,
+    )
 
 
 @router.get("/members", response_model=list[AdminMemberReadResponse])
@@ -114,41 +131,28 @@ def ride_stats(
     db: Session = Depends(get_db_session),
 ) -> AdminRideStatsResponse:
     total_members = db.scalar(select(func.count(Member.MemberID))) or 0
-    total_rides = db.scalar(select(func.count(Ride.RideID))) or 0
-
-    open_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Open")) or 0
-    full_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Full")) or 0
-    cancelled_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Cancelled")) or 0
-    completed_rides = db.scalar(select(func.count(Ride.RideID)).where(Ride.Ride_Status == "Completed")) or 0
-
-    total_bookings = db.scalar(select(func.count(Booking.BookingID))) or 0
-    pending_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Pending")) or 0
-    confirmed_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Confirmed")) or 0
-    rejected_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Rejected")) or 0
-    cancelled_bookings = db.scalar(select(func.count(Booking.BookingID)).where(Booking.Booking_Status == "Cancelled")) or 0
-
-    total_capacity_seats = db.scalar(select(func.coalesce(func.sum(Ride.Max_Capacity), 0))) or 0
-    total_available_seats = db.scalar(select(func.coalesce(func.sum(Ride.Available_Seats), 0))) or 0
-    total_booked_seats = max(0, int(total_capacity_seats) - int(total_available_seats))
-
-    average_base_fare = db.scalar(select(func.coalesce(func.avg(Ride.Base_Fare_Per_KM), 0))) or 0
+    shard_stats = aggregate_ride_booking_stats_across_shards()
+    total_booked_seats = max(
+        0,
+        int(shard_stats["total_capacity_seats"]) - int(shard_stats["total_available_seats"]),
+    )
 
     return AdminRideStatsResponse(
         total_members=int(total_members),
-        total_rides=int(total_rides),
-        open_rides=int(open_rides),
-        full_rides=int(full_rides),
-        cancelled_rides=int(cancelled_rides),
-        completed_rides=int(completed_rides),
-        total_bookings=int(total_bookings),
-        pending_bookings=int(pending_bookings),
-        confirmed_bookings=int(confirmed_bookings),
-        rejected_bookings=int(rejected_bookings),
-        cancelled_bookings=int(cancelled_bookings),
-        total_capacity_seats=int(total_capacity_seats),
-        total_available_seats=int(total_available_seats),
+        total_rides=int(shard_stats["total_rides"]),
+        open_rides=int(shard_stats["open_rides"]),
+        full_rides=int(shard_stats["full_rides"]),
+        cancelled_rides=int(shard_stats["cancelled_rides"]),
+        completed_rides=int(shard_stats["completed_rides"]),
+        total_bookings=int(shard_stats["total_bookings"]),
+        pending_bookings=int(shard_stats["pending_bookings"]),
+        confirmed_bookings=int(shard_stats["confirmed_bookings"]),
+        rejected_bookings=int(shard_stats["rejected_bookings"]),
+        cancelled_bookings=int(shard_stats["cancelled_bookings"]),
+        total_capacity_seats=int(shard_stats["total_capacity_seats"]),
+        total_available_seats=int(shard_stats["total_available_seats"]),
         total_booked_seats=total_booked_seats,
-        average_base_fare_per_km=float(average_base_fare),
+        average_base_fare_per_km=float(shard_stats["average_base_fare_per_km"]),
     )
 
 
@@ -198,76 +202,25 @@ def read_audit_logs(
 @router.get("/rides/active", response_model=list[AdminRideReadResponse])
 def list_active_rides(
     _: AuthCredential = Depends(get_current_admin_credential),
-    db: Session = Depends(get_db_session),
 ) -> list[AdminRideReadResponse]:
-    stmt = select(Ride).where(Ride.Ride_Status == "Started").order_by(Ride.Departure_Time.asc())
-    rides = list(db.scalars(stmt))
-    return [
-        AdminRideReadResponse(
-            ride_id=ride.RideID,
-            host_member_id=ride.Host_MemberID,
-            start_geohash=ride.Start_GeoHash,
-            end_geohash=ride.End_GeoHash,
-            departure_time=ride.Departure_Time,
-            vehicle_type=ride.Vehicle_Type,
-            max_capacity=ride.Max_Capacity,
-            available_seats=ride.Available_Seats,
-            base_fare_per_km=float(ride.Base_Fare_Per_KM),
-            ride_status=ride.Ride_Status,
-            created_at=ride.Created_At,
-        )
-        for ride in rides
-    ]
+    rides = list_rides_across_shards(statuses=("Started",), order_desc=False)
+    return [_to_admin_ride_read_response(ride) for ride in rides]
 
 
 @router.get("/rides/open", response_model=list[AdminRideReadResponse])
 def list_open_rides(
     _: AuthCredential = Depends(get_current_admin_credential),
-    db: Session = Depends(get_db_session),
 ) -> list[AdminRideReadResponse]:
-    stmt = select(Ride).where(Ride.Ride_Status == "Open").order_by(Ride.Departure_Time.asc())
-    rides = list(db.scalars(stmt))
-    return [
-        AdminRideReadResponse(
-            ride_id=ride.RideID,
-            host_member_id=ride.Host_MemberID,
-            start_geohash=ride.Start_GeoHash,
-            end_geohash=ride.End_GeoHash,
-            departure_time=ride.Departure_Time,
-            vehicle_type=ride.Vehicle_Type,
-            max_capacity=ride.Max_Capacity,
-            available_seats=ride.Available_Seats,
-            base_fare_per_km=float(ride.Base_Fare_Per_KM),
-            ride_status=ride.Ride_Status,
-            created_at=ride.Created_At,
-        )
-        for ride in rides
-    ]
+    rides = list_rides_across_shards(statuses=("Open",), order_desc=False)
+    return [_to_admin_ride_read_response(ride) for ride in rides]
 
 
 @router.get("/rides/completed", response_model=list[AdminRideReadResponse])
 def list_completed_rides(
     _: AuthCredential = Depends(get_current_admin_credential),
-    db: Session = Depends(get_db_session),
 ) -> list[AdminRideReadResponse]:
-    stmt = select(Ride).where(Ride.Ride_Status == "Completed").order_by(Ride.Departure_Time.desc())
-    rides = list(db.scalars(stmt))
-    return [
-        AdminRideReadResponse(
-            ride_id=ride.RideID,
-            host_member_id=ride.Host_MemberID,
-            start_geohash=ride.Start_GeoHash,
-            end_geohash=ride.End_GeoHash,
-            departure_time=ride.Departure_Time,
-            vehicle_type=ride.Vehicle_Type,
-            max_capacity=ride.Max_Capacity,
-            available_seats=ride.Available_Seats,
-            base_fare_per_km=float(ride.Base_Fare_Per_KM),
-            ride_status=ride.Ride_Status,
-            created_at=ride.Created_At,
-        )
-        for ride in rides
-    ]
+    rides = list_rides_across_shards(statuses=("Completed",), order_desc=True)
+    return [_to_admin_ride_read_response(ride) for ride in rides]
 
 
 @router.get("/rides/{ride_id}/participants", response_model=list[AdminRideParticipantResponse])

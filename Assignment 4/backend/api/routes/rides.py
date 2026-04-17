@@ -10,6 +10,7 @@ from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
 from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km
+from core.shard_queries import list_rides_across_shards
 from db.session import get_db_session
 from db.sharding import SHARD_SESSION_MAKERS, shard_id_for_ride_id
 from models.booking import Booking
@@ -38,15 +39,10 @@ def get_shard_session_for_ride(ride_id: int):
 def list_rides(
     only_open: bool = Query(default=True),
     limit: int = Query(default=25, ge=1, le=100),
-    db: Session = Depends(get_db_session),
 ) -> list[Ride]:
     logger.info("rides.list only_open=%s limit=%s", only_open, limit)
-    stmt = select(Ride).order_by(Ride.Departure_Time.asc()).limit(limit)
-    if only_open:
-        stmt = stmt.where(Ride.Ride_Status == "Open")
-    else:
-        stmt = stmt.where(Ride.Ride_Status.in_(["Open", "Full"]))
-    return list(db.scalars(stmt))
+    statuses = ("Open",) if only_open else ("Open", "Full")
+    return list_rides_across_shards(statuses=statuses, limit=limit, order_desc=False)
 
 
 @router.get("/{ride_id}", response_model=RideReadResponse)
