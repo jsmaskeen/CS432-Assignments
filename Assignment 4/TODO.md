@@ -28,10 +28,11 @@ Endpoints to Refactor:
   - [x] `DELETE /api/v1/bookings/{booking_id}` : resolve via Rides.RideID : shard
   - [x] `POST /api/v1/bookings/{booking_id}/accept` : resolve via Rides.RideID : shard
   - [x] `POST /api/v1/bookings/{booking_id}/reject` : resolve via Rides.RideID : shard
+  - [x] `GET /api/v1/bookings/my/bookings` : fan-out reads across shards + global merge sort
   
-- [ ] Chat endpoints
-  - [ ] `POST /api/v1/rides/{ride_id}/messages` : write to shard
-  - [ ] `GET /api/v1/rides/{ride_id}/messages` : read from shard
+- [x] Chat endpoints
+  - [x] `GET /api/v1/chat/ride/{ride_id}` : read from shard
+  - [x] `WS /api/v1/chat/ws/ride/{ride_id}` : membership checks + writes on shard
   
 - [ ] Review endpoints
   - [ ] `POST /api/v1/rides/{ride_id}/reviews` : write to shard
@@ -43,6 +44,7 @@ Endpoints to Refactor:
 Multi-Shard Operations:
 - [x] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
 - [x] Admin ride listings + stats : fan-out/aggregate across shards
+- [x] Parallel shard fan-out (thread pool) for rides list/stats + my bookings
 - [ ] Range queries : cross-shard aggregation
 
 > Extract and generalize multi-shard fan-out + merge logic into reusable utilities.
@@ -59,12 +61,12 @@ Utilities to Create:
 - [ ] Run migration: `uv run python -m scripts.migrate_rides_to_shards`
 - [ ] Validate migration: `uv run python -m scripts.validate_shard_migration`
 - [ ] Test endpoint routing via demo APIs
-- [x] Test Phase 2 endpoints (single-shard operations)
-- [x] Test Phase 3 endpoints (cross-shard operations)
+- [ ] Test Phase 2 endpoints (single-shard operations)
+- [ ] Test Phase 3 endpoints (cross-shard operations)
 - [ ] Verify data isolation (confirm rides in shard_0 stay in shard_0)
 - [ ] Performance baseline: Monitor query latency before/after sharding
 
-- [x] Add automated tests for shard utilities + ride/admin shard routes
+- [ ] Add automated tests for shard utilities + ride/admin shard routes
 
 - [ ] Create orchestration script (run all steps with one command)
 - [ ] Load test across shards (concurrent operations)
