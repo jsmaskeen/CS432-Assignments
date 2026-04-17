@@ -76,7 +76,7 @@ def init_auth_tables() -> None:
     from models.review import ReputationReview
     from models.ride_participant import RideParticipant
     from models.saved_address import SavedAddress
-    from models.shard_directory import RideShardDirectory
+    from models.shard_directory import ReviewShardDirectory, RideShardDirectory
     from models.settlement import CostSettlement
 
     AuthCredential.__table__.create(bind=engine, checkfirst=True)
@@ -88,6 +88,7 @@ def init_auth_tables() -> None:
     RideChatMessage.__table__.create(bind=engine, checkfirst=True)
     RideParticipant.__table__.create(bind=engine, checkfirst=True)
     RideShardDirectory.__table__.create(bind=engine, checkfirst=True)
+    ReviewShardDirectory.__table__.create(bind=engine, checkfirst=True)
 
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("Auth_Credentials")}

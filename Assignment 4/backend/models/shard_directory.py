@@ -18,3 +18,15 @@ class RideShardDirectory(Base):
     ShardID: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     Strategy: Mapped[str] = mapped_column(String(50), nullable=False, default="ride_id_mod_3")
     Created_At: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class ReviewShardDirectory(Base):
+    __tablename__ = "Review_Shard_Directory"
+    __table_args__ = (
+        CheckConstraint("ShardID in (0,1,2)", name="Review_Shard_Directory_chk_1"),
+    )
+
+    ReviewID: Mapped[int] = mapped_column(primary_key=True)
+    ShardID: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    Strategy: Mapped[str] = mapped_column(String(50), nullable=False, default="review_ride_shard")
+    Created_At: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
