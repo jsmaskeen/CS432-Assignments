@@ -15,8 +15,12 @@
 
 Endpoints to Refactor:
 - [x] Single-ride operations
+  - [x] `POST /api/v1/rides` : write to shard
   - [x] `GET /api/v1/rides/{ride_id}` : read from shard
   - [x] `PATCH /api/v1/rides/{ride_id}` : write to shard
+  - [x] `POST /api/v1/rides/{ride_id}/start` : write to shard
+  - [x] `POST /api/v1/rides/{ride_id}/end` : write + settlements on shard
+  - [x] `DELETE /api/v1/rides/{ride_id}` : delete on shard
   - [x] `GET /api/v1/rides/{ride_id}/with-bookings` : read from shard
   
 - [x] Booking endpoints (core operations)
@@ -38,6 +42,7 @@ Endpoints to Refactor:
 
 Multi-Shard Operations:
 - [x] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
+- [x] Admin ride listings + stats : fan-out/aggregate across shards
 - [ ] Range queries : cross-shard aggregation
 
 > Extract and generalize multi-shard fan-out + merge logic into reusable utilities.
@@ -46,7 +51,7 @@ Utilities to Create:
 - [x] `list_rides_across_shards(filter, sort)` : queries all 3 shards, merges results
 - [ ] `list_bookings_by_ride_range(start_ride_id, end_ride_id)` : cross-shard aggregation
 - [ ] Generic merge/dedup helper for common operations
-- [ ] Integrate into main endpoints (e.g., `GET /rides` route)
+- [x] Integrate into main endpoints (e.g., `GET /rides` route)
 
 > Execute complete workflow with validation.
 
@@ -54,10 +59,12 @@ Utilities to Create:
 - [ ] Run migration: `uv run python -m scripts.migrate_rides_to_shards`
 - [ ] Validate migration: `uv run python -m scripts.validate_shard_migration`
 - [ ] Test endpoint routing via demo APIs
-- [ ] Test Phase 2 endpoints (single-shard operations)
-- [ ] Test Phase 3 endpoints (cross-shard operations)
+- [x] Test Phase 2 endpoints (single-shard operations)
+- [x] Test Phase 3 endpoints (cross-shard operations)
 - [ ] Verify data isolation (confirm rides in shard_0 stay in shard_0)
 - [ ] Performance baseline: Monitor query latency before/after sharding
+
+- [x] Add automated tests for shard utilities + ride/admin shard routes
 
 - [ ] Create orchestration script (run all steps with one command)
 - [ ] Load test across shards (concurrent operations)
