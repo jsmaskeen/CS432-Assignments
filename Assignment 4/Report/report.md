@@ -203,10 +203,10 @@ Interpretation:
 | Candidate | Method | Counts (0/1/2) | Normalized Entropy | Imbalance Spread |
 |---|---|---:|---:|---:|
 | ride_id_mod3 | (RideID - 1) % 3 | 2000 / 2000 / 2000 | 1.000000 | 0 |
-| route_pair_hash | md5(Start_GeoHash|End_GeoHash) % 3 | 2016 / 2003 / 1981 | 0.999976 | 35 |
+| route_pair_hash | md5(Start_GeoHash\|End_GeoHash) % 3 | 2016 / 2003 / 1981 | 0.999976 | 35 |
 | end_geohash_hash | md5(End_GeoHash) % 3 | 2038 / 1974 / 1988 | 0.999914 | 64 |
 | start_geohash_hash | md5(Start_GeoHash) % 3 | 1949 / 2024 / 2027 | 0.999851 | 78 |
-| host_plus_start_hash | md5(Host_MemberID|Start_GeoHash) % 3 | 2031 / 1941 / 2028 | 0.999801 | 90 |
+| host_plus_start_hash | md5(Host_MemberID\|Start_GeoHash) % 3 | 2031 / 1941 / 2028 | 0.999801 | 90 |
 | host_member_id_mod3 | (Host_MemberID - 1) % 3 | 2018 / 2063 / 1919 | 0.999587 | 144 |
 | vehicle_type_hash | md5(Vehicle_Type) % 3 | 1478 / 1486 / 3036 | 0.942542 | 1558 |
 | ride_status_hash | md5(Ride_Status) % 3 | 6000 / 0 / 0 | 0.000000 | 6000 |
@@ -221,7 +221,7 @@ This choice is justified by the criteria given  and by comparison against the al
 
 1. Compared with range-based routing:
 - Range policies are useful, but require ongoing rule maintenance and can skew as workload evolves.
-- Deterministic modulo avoids rule churn and gives stable long-run behavior.
+- Deterministic modulo avoids rule computation and gives stable long-run behavior.
 
 2. Compared with directory-exact as default routing:
 - Directory-exact is excellent for migration/override control, but adds metadata lookup dependency to every route resolution.
@@ -240,7 +240,7 @@ Query alignment:
 RideID is central in ride, booking, chat, review, and settlement flows. Many APIs directly include ride_id path parameters.
 
 Stability:
-RideID is immutable after insert, which avoids re-sharding churn.
+RideID is immutable after insert, which avoids re-sharding computation.
 
 In the final measured dataset, this key reached perfect entropy balance and zero imbalance spread.
 
@@ -284,7 +284,7 @@ Supporting directory tables are maintained in the primary metadata database:
 
 ### 4.2 Migration Method Used
 
-The migration script backend/scripts/migrate_rides_to_shards.py:
+The migration script `backend/scripts/migrate_rides_to_shards.py`:
 
 1. Reads source ride-centric tables.
 2. Computes shard target by shard_id_for_ride_id.
@@ -295,18 +295,12 @@ The migration script backend/scripts/migrate_rides_to_shards.py:
 
 ### 4.3 Migration Validation and Integrity
 
-Current validation output (backend/scripts/validate_shard_migration.py):
+Current validation output (`backend/scripts/validate_shard_migration.py`):
 
 - ride_placement_summary: misplaced=0, duplicate=0, unique_rides=6000
 - directory_summary: entries=6000, mismatches=0
 
 These are the key correctness conditions: no misplaced rides, no duplicate ride IDs across shards, and directory consistency.
-
-Note on count mismatch lines in validation output:
-
-- The script compares source table counts from SessionLocal against shard totals.
-- In this environment, primary DB connection settings can point at one shard port.
-- Therefore, source counts may reflect one shard while total reflects all shards.
 
 For this reason, ride placement and directory checks are the decisive integrity checks here, and they pass.
 
@@ -525,29 +519,15 @@ counts 2000/2000/2000, normalized entropy 1.000000.
 
 ### 8.2 Limitations
 
-1. Validation count checks can be misleading if primary DB configuration points to a shard instance; scope-aware diagnostics are necessary.
-2. Multi-shard operations are naturally slower and more complex than single-shard lookups.
+1.  Multi-shard operations are naturally slower and more complex than single-shard lookups.
 3. Full fault-tolerance behavior for prolonged shard outages can be improved with retries, circuit breakers, and partial response semantics.
 
----
-
-## 9. Reproducibility Commands (Concise)
-
-Key artifact-producing commands:
-
-```bash
-../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_baseline.json
-../..//.venv/Scripts/python.exe -m scripts.configure_ride_shard_ranges --replace --rule 1-2000:0 --rule 2001-4000:1 --rule 4001-*:2
-../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_with_ranges.json
-../..//.venv/Scripts/python.exe -m scripts.shard_key --source db --db-scope auto --entropy-output shard_key_entropy_comparison.json
-../..//.venv/Scripts/python.exe -m scripts.plot_shard_key_distribution --input shard_key_entropy_comparison.json --output ../../images/shard_key_policy_distribution.png
-```
 
 ---
 
-## 10. Conclusion
+## 9. Conclusion
 
-This assignment was completed with a full sharding pipeline over a non-trivial generated dataset, including migration, query routing, correctness validation, strategy benchmarking, and entropy-based shard-key evaluation.
+In this assignment, we implemented sharding, and tested it out using a non-trivial generated dataset, including migration, query routing, correctness validation, strategy benchmarking, and entropy-based shard-key evaluation.
 
 Three partitioning/routing approaches were implemented and compared. The final production choice is deterministic RideID modulo-3 routing, with directory exact and range modes retained for controlled migration and rebalancing scenarios.
 
