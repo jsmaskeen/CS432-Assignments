@@ -215,7 +215,7 @@ Interpretation:
 
 The selected shard key is RideID with the deterministic mapping:
 
-shard_id = (RideID - 1) % 3
+`shard_id = (RideID - 1) % 3`
 
 This choice is justified by the criteria given  and by comparison against the alternatives:
 

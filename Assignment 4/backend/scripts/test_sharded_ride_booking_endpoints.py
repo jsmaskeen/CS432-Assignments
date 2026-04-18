@@ -391,30 +391,6 @@ def get_max_ride_id() -> int:
     return max_ride_id
 
 
-def mirror_ride_to_primary(ride: Ride) -> None:
-    with SessionLocal() as primary_db:
-        existing = primary_db.scalar(select(Ride).where(Ride.RideID == ride.RideID))
-        if existing is not None:
-            return
-
-        primary_db.add(
-            Ride(
-                RideID=ride.RideID,
-                Host_MemberID=ride.Host_MemberID,
-                Start_GeoHash=ride.Start_GeoHash,
-                End_GeoHash=ride.End_GeoHash,
-                Departure_Time=ride.Departure_Time,
-                Vehicle_Type=ride.Vehicle_Type,
-                Max_Capacity=ride.Max_Capacity,
-                Available_Seats=ride.Available_Seats,
-                Base_Fare_Per_KM=ride.Base_Fare_Per_KM,
-                Ride_Status=ride.Ride_Status,
-                Created_At=ride.Created_At,
-            )
-        )
-        primary_db.commit()
-
-
 def create_test_ride_for_shard(
     shard_id: int,
     host_member_id: int,
@@ -455,7 +431,6 @@ def create_test_ride_for_shard(
     finally:
         shard_db.close()
 
-    mirror_ride_to_primary(ride)
     return RideContext(
         ride_id=ride.RideID,
         host_member_id=host_member_id,
@@ -465,26 +440,65 @@ def create_test_ride_for_shard(
     )
 
 
-def find_or_create_ride_contexts() -> list[RideContext]:
-    with SessionLocal() as db:
-        rides = list(
-            db.scalars(
-                select(Ride)
-                .where(Ride.Ride_Status == "Open")
-                .where(Ride.Available_Seats > 0)
-                .order_by(Ride.RideID.asc())
-            )
-        )
+def _choose_member_for_ride(
+    primary_db: Session,
+    ride: Ride,
+    excluded_member_ids: set[int],
+    booked_member_ids: set[int],
+) -> int | None:
+    stmt = (
+        select(Member.MemberID)
+        .join(AuthCredential, AuthCredential.MemberID == Member.MemberID)
+        .where(AuthCredential.Username.like("fake_user_%"))
+        .where(Member.MemberID != ride.Host_MemberID)
+    )
+    if excluded_member_ids:
+        stmt = stmt.where(~Member.MemberID.in_(excluded_member_ids))
+    if booked_member_ids:
+        stmt = stmt.where(~Member.MemberID.in_(booked_member_ids))
 
+    return primary_db.scalar(stmt.order_by(Member.MemberID.asc()))
+
+
+def find_or_create_ride_contexts() -> list[RideContext]:
+    shard_rides: list[Ride] = []
+    for shard_id in (0, 1, 2):
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            shard_rides.extend(
+                list(
+                    shard_db.scalars(
+                        select(Ride)
+                        .where(Ride.Ride_Status == "Open")
+                        .where(Ride.Available_Seats > 0)
+                        .order_by(Ride.RideID.asc())
+                    )
+                )
+            )
+        finally:
+            shard_db.close()
+
+    shard_rides.sort(key=lambda ride: int(ride.RideID))
+
+    with SessionLocal() as db:
         contexts: list[RideContext] = []
         used_passenger_ids: set[int] = set()
 
-        for ride in rides:
+        for ride in shard_rides:
             host_credential = db.scalar(select(AuthCredential).where(AuthCredential.MemberID == ride.Host_MemberID))
             if host_credential is None or not host_credential.Username.startswith("fake_user_"):
                 continue
 
-            passenger_member_id = choose_member(db, ride, used_passenger_ids)
+            ride_shard_id = shard_id_for_ride_id(int(ride.RideID))
+            shard_db = SHARD_SESSION_MAKERS[ride_shard_id]()
+            try:
+                booked_member_ids = set(
+                    shard_db.scalars(select(Booking.Passenger_MemberID).where(Booking.RideID == ride.RideID)).all()
+                )
+            finally:
+                shard_db.close()
+
+            passenger_member_id = _choose_member_for_ride(db, ride, used_passenger_ids, booked_member_ids)
             if passenger_member_id is None:
                 continue
 
@@ -510,26 +524,6 @@ def find_or_create_ride_contexts() -> list[RideContext]:
         create_test_ride_for_shard(0, fake_members[0].MemberID, fake_members[1].MemberID, 1),
         create_test_ride_for_shard(1, fake_members[1].MemberID, fake_members[0].MemberID, 2),
     ]
-
-
-def mirror_booking_to_primary(booking_payload: dict[str, Any]) -> None:
-    with SessionLocal() as primary_db:
-        existing = primary_db.scalar(select(Booking).where(Booking.BookingID == booking_payload["BookingID"]))
-        if existing is not None:
-            return
-
-        primary_db.add(
-            Booking(
-                BookingID=booking_payload["BookingID"],
-                RideID=booking_payload["RideID"],
-                Passenger_MemberID=booking_payload["Passenger_MemberID"],
-                Booking_Status=booking_payload["Booking_Status"],
-                Pickup_GeoHash=booking_payload["Pickup_GeoHash"],
-                Drop_GeoHash=booking_payload["Drop_GeoHash"],
-                Distance_Travelled_KM=Decimal(str(booking_payload["Distance_Travelled_KM"])),
-            )
-        )
-        primary_db.commit()
 
 
 def future_iso(hours_ahead: int) -> str:
@@ -576,7 +570,6 @@ def run_flow_accept_and_delete(
         (pickup_geohash, drop_geohash),
         f"ride-{context.ride_id}-accept",
     )
-    mirror_booking_to_primary(booking_created)
     pending_after = request_json(
         session,
         base_url,
@@ -669,7 +662,6 @@ def run_flow_reject(
         (pickup_geohash, drop_geohash),
         f"ride-{context.ride_id}-reject",
     )
-    mirror_booking_to_primary(booking_created)
     pending_after = request_json(
         session,
         base_url,
