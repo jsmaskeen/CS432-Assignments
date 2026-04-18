@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (MiKTeX 25.3) (preloaded format=pdflatex 2025.9.21)  18 APR 2026 17:43
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (MiKTeX 25.3) (preloaded format=pdflatex 2025.9.21)  18 APR 2026 17:52
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -522,13 +522,13 @@ AJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-ec.enc}{C:/Users/GSRAJA
 /AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-ts1.enc}]
 
 [2]
-Overfull \hbox (3.79272pt too wide) in paragraph at lines 110--111
+Overfull \hbox (3.79272pt too wide) in paragraph at lines 121--122
 []\T1/lmr/m/n/12 Range-rule sup-port via \T1/lmtt/m/n/12 Ride_Shard_Range_Direc
 tory \T1/lmr/m/n/12 (a meta-data ta-ble that stores
  []
 
 
-Overfull \hbox (15.61742pt too wide) in paragraph at lines 135--136
+Overfull \hbox (15.61742pt too wide) in paragraph at lines 146--147
 []\T1/lmr/m/n/12 Deterministic mod-ulo on RideID: \T1/lmtt/m/n/12 shard_id = (R
 ideID - 1) % 3 \T1/lmr/m/n/12 (same in-put RideID
  []
@@ -539,48 +539,47 @@ ideID - 1) % 3 \T1/lmr/m/n/12 (same in-put RideID
 
 [4]
 
-[5{C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit.e
+[5]
+
+[6{C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit.e
 nc}{C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rm.enc}
 {C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathsy.enc
 }{C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathex.en
 c}]
-
-[6]
 <../images/shard_key_policy_distribution.png, id=225, 1004.1515pt x 568.9255pt>
 
 File: ../images/shard_key_policy_distribution.png Graphic file (type png)
 <use ../images/shard_key_policy_distribution.png>
 Package pdftex.def Info: ../images/shard_key_policy_distribution.png  used on i
-nput line 344.
+nput line 355.
 (pdftex.def)             Requested size: 407.66833pt x 230.97784pt.
 
 
-[7
+[7]
+
+[8
 pdfTeX warning (ext4): destination with the same identifier (name{figure.1}) ha
 s been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.371     \item R
-                 ide\_Participants <../images/shard_key_policy_distribution.png
->]
-
-[8]
+l.390     \item R
+                 ides <../images/shard_key_policy_distribution.png>]
 
 [9]
-Overfull \hbox (115.13239pt too wide) in paragraph at lines 493--493
+
+[10]
+Overfull \hbox (115.13239pt too wide) in paragraph at lines 515--515
 []\T1/lmtt/m/n/12 def get_shard_session_for_ride(ride_id: int, primary_db: Sess
 ion = Depends(get_db_session)):[] 
  []
 
 
-Overfull \hbox (59.55736pt too wide) in paragraph at lines 505--505
+Overfull \hbox (59.55736pt too wide) in paragraph at lines 527--527
 []\T1/lmtt/m/n/12 def _candidate_shards_for_range(start_ride_id: int, end_ride_
 id: int) -> list[int]:[] 
  []
 
 
-
-[10]
 
 [11]
 
@@ -588,22 +587,24 @@ id: int) -> list[int]:[]
 
 [13]
 
-[14] (Datahoarders_Report.aux)
+[14]
+
+[15] (Datahoarders_Report.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
  ***********
 Package rerunfilecheck Info: File `Datahoarders_Report.out' has not changed.
-(rerunfilecheck)             Checksum: 950A39298AD4B664BAC0B694FF7F820D;7892.
+(rerunfilecheck)             Checksum: D08E26E55723399E18C63E6B9612456E;8117.
  ) 
 Here is how much of TeX's memory you used:
- 10497 strings out of 473523
- 164246 string characters out of 5714146
+ 10500 strings out of 473523
+ 164283 string characters out of 5714146
  566246 words of memory out of 5000000
- 33464 multiletter control sequences out of 15000+600000
+ 33465 multiletter control sequences out of 15000+600000
  609433 words of font info for 68 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,11n,79p,425b,528s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,11n,79p,425b,585s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.p
 fb><C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmex10.
 pfb><C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi12
@@ -614,9 +615,9 @@ pfb><C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi12
 pfb><C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10
 .pfb><C:/Users/GSRAJA/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt1
 2.pfb>
-Output written on Datahoarders_Report.pdf (14 pages, 321327 bytes).
+Output written on Datahoarders_Report.pdf (15 pages, 323460 bytes).
 PDF statistics:
- 360 PDF objects out of 1000 (max. 8388607)
- 105 named destinations out of 1000 (max. 500000)
- 318 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 368 PDF objects out of 1000 (max. 8388607)
+ 107 named destinations out of 1000 (max. 500000)
+ 326 words of extra memory for PDF output out of 10000 (max. 10000000)
 
