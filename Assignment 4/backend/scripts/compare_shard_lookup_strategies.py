@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import time
 from pathlib import Path
@@ -56,6 +57,24 @@ def _resolve_range_or_modulo(ride_id: int, ranges: list[tuple[int, int | None, i
     return shard_id
 
 
+def _distribution_entropy(distribution: dict[int, int], *, shard_count: int = 3) -> tuple[float, float, float]:
+    total = sum(distribution.values())
+    if total <= 0 or shard_count <= 1:
+        return 0.0, 0.0, 0.0
+
+    entropy_bits = 0.0
+    for shard_id in range(shard_count):
+        count = distribution.get(shard_id, 0)
+        if count <= 0:
+            continue
+        probability = count / total
+        entropy_bits -= probability * math.log2(probability)
+
+    max_entropy_bits = math.log2(shard_count)
+    normalized_entropy = entropy_bits / max_entropy_bits if max_entropy_bits > 0 else 0.0
+    return entropy_bits, max_entropy_bits, normalized_entropy
+
+
 def _benchmark(name: str, resolver, ride_ids: list[int], iterations: int) -> dict[str, object]:
     samples = [random.choice(ride_ids) for _ in range(iterations)]
     latencies_ms: list[float] = []
@@ -72,6 +91,8 @@ def _benchmark(name: str, resolver, ride_ids: list[int], iterations: int) -> dic
     latencies_ms.sort()
     p95_index = max(0, int(len(latencies_ms) * 0.95) - 1)
     p99_index = max(0, int(len(latencies_ms) * 0.99) - 1)
+    entropy_bits, max_entropy_bits, normalized_entropy = _distribution_entropy(distribution)
+    imbalance_spread = max(distribution.values()) - min(distribution.values())
 
     return {
         "strategy": name,
@@ -83,6 +104,10 @@ def _benchmark(name: str, resolver, ride_ids: list[int], iterations: int) -> dic
         "total_ms": total_ms,
         "lookups_per_second": (iterations / (total_ms / 1000.0)) if total_ms > 0 else 0.0,
         "sampled_distribution": distribution,
+        "entropy_bits": entropy_bits,
+        "max_entropy_bits": max_entropy_bits,
+        "normalized_entropy": normalized_entropy,
+        "imbalance_spread": imbalance_spread,
     }
 
 

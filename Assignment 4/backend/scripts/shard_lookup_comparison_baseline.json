@@ -1,0 +1,44 @@
+{
+  "ride_count": 6000,
+  "range_rule_count": 0,
+  "results": [
+    {
+      "strategy": "modulo",
+      "iterations": 20000,
+      "avg_ms": 0.0002339449420105666,
+      "p95_ms": 0.000300002284348011,
+      "p99_ms": 0.000500003807246685,
+      "max_ms": 0.0317999511025846,
+      "total_ms": 10.10590000078082,
+      "lookups_per_second": 1979041.9456411328,
+      "sampled_distribution": {
+        "0": 6768,
+        "1": 6654,
+        "2": 6578
+      },
+      "entropy_bits": 1.5848636352413652,
+      "max_entropy_bits": 1.584962500721156,
+      "normalized_entropy": 0.9999376228271988,
+      "imbalance_spread": 190
+    },
+    {
+      "strategy": "directory_exact_cache",
+      "iterations": 20000,
+      "avg_ms": 0.0005201399471843615,
+      "p95_ms": 0.000900006853044033,
+      "p99_ms": 0.001200009137392044,
+      "max_ms": 0.06120000034570694,
+      "total_ms": 17.33020000392571,
+      "lookups_per_second": 1154054.771178031,
+      "sampled_distribution": {
+        "0": 6685,
+        "1": 6786,
+        "2": 6529
+      },
+      "entropy_bits": 1.584780851199827,
+      "max_entropy_bits": 1.584962500721156,
+      "normalized_entropy": 0.9998853919122714,
+      "imbalance_spread": 257
+    }
+  ]
+}

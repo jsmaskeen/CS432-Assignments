@@ -34,18 +34,18 @@ Endpoints to Refactor:
   - [x] `GET /api/v1/chat/ride/{ride_id}` : read from shard
   - [x] `WS /api/v1/chat/ws/ride/{ride_id}` : membership checks + writes on shard
   
-- [ ] Review endpoints
-  - [ ] `POST /api/v1/rides/{ride_id}/reviews` : write to shard
-  - [ ] `GET /api/v1/rides/{ride_id}/reviews` : read from shard
+- [x] Review endpoints
+  - [x] `POST /api/v1/rides/{ride_id}/reviews` : write to shard
+  - [x] `GET /api/v1/rides/{ride_id}/reviews` : read from shard
   
-- [ ] Settlement endpoints
-  - [ ] Rides-related settlement operations : route via RideID
+- [x] Settlement endpoints
+  - [x] Rides-related settlement operations : route via RideID
 
 Multi-Shard Operations:
 - [x] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
 - [x] Admin ride listings + stats : fan-out/aggregate across shards
 - [x] Parallel shard fan-out (thread pool) for rides list/stats + my bookings
-- [ ] Range queries : cross-shard aggregation
+- [x] Range queries : cross-shard aggregation
 
 > Extract and generalize multi-shard fan-out + merge logic into reusable utilities.
 
@@ -66,7 +66,7 @@ Utilities to Create:
 - [ ] Verify data isolation (confirm rides in shard_0 stay in shard_0)
 - [ ] Performance baseline: Monitor query latency before/after sharding
 
-- [ ] Add automated tests for shard utilities + ride/admin shard routes
+- [x] Add automated tests for shard utilities + ride/admin shard routes
 
 - [ ] Create orchestration script (run all steps with one command)
 - [ ] Load test across shards (concurrent operations)
