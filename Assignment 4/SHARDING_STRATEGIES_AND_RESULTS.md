@@ -1,135 +1,122 @@
-# Sharding Strategy and Results (Default Strategy: Modulo)
+# Sharding Strategy and Results
 
-This document explains the sharding setup currently in use for Assignment 4.
+This document summarizes the final strategy comparison and measured outcomes for Assignment 4 sharding.
 
-Decision for now: default to deterministic modulo (`ride_id_mod_3`), while keeping exact-directory and range-directory modes available for testing and benchmarking.
+## 1) Strategy Families Implemented
 
-## 1) Active Lookup Strategy
+### A) Hash-based routing
+- Strategy: deterministic modulo routing
+- Mapping: `shard_id = (RideID - 1) % 3`
+- Runtime behavior: no metadata lookup required
 
-### Deterministic modulo (`ride_id_mod_3`)
-- Definition: compute shard directly from `RideID`.
-- Formula: `shard_id = (ride_id - 1) % 3`.
-- Implementation source: `Assignment 4/backend/db/sharding.py` (`shard_id_for_ride_id`).
-- Why this is chosen now:
-  - Very low lookup overhead (pure arithmetic).
-  - No metadata dependency needed for shard selection.
-  - Simple and predictable behavior during development.
+### B) Directory exact routing
+- Strategy: per-ride lookup from `Ride_Shard_Directory`
+- Runtime behavior: metadata lookup + fallback logic
 
-### Exact-directory lookup (`directory_exact`)
-- Definition: resolve `RideID` through `Ride_Shard_Directory` when the mode is enabled.
-- Useful for tests that want to validate explicit per-ride placement or migration overrides.
+### C) Directory range routing
+- Strategy: key-range lookup from `Ride_Shard_Range_Directory`
+- Runtime behavior: rule evaluation + fallback logic
 
-### Range-directory lookup (`directory_range`)
-- Definition: resolve `RideID` through `Ride_Shard_Range_Directory` when the mode is enabled.
-- Useful for testing rebalancing by key ranges.
+Final runtime default is hash-based modulo. Directory exact/range are retained for migration control and rebalancing support.
 
-## 2) Table Sharding Layout
+## 2) Data and Environment Snapshot
 
-### Ride-centric tables (sharded across shard_0, shard_1, shard_2)
-- `Rides`
-- `Bookings`
-- `Ride_Chat`
-- `Ride_Participants`
-- `Reputation_Reviews`
-- `Cost_Settlements`
+- Shard count: 3
+- Final evaluated dataset:
+  - rides: 6000
+  - bookings: 13370
+- Entropy analysis source: live DB, shard-scope aggregation (`--source db --db-scope auto`)
 
-These are distributed by ride shard placement.
+## 3) Commands Used (Latest Run)
 
-### Centralized tables (primary DB)
-- `Ride_Shard_Directory`
-- `Ride_Shard_Range_Directory`
-- `Review_Shard_Directory`
-- Other global entities (locations, preferences, etc.)
+From `Assignment 4/backend`:
 
-Even though directory tables exist, the default operational policy is modulo lookup. The other two modes remain available by changing `RIDE_SHARD_LOOKUP_MODE`.
-
-## 3) What the Microbenchmark Measures
-
-The benchmark script `Assignment 4/backend/scripts/compare_shard_lookup_strategies.py` measures only shard-id lookup cost in Python for sampled ride IDs.
-
-What it does:
-- Loads existing ride IDs from `Ride_Shard_Directory`.
-- Randomly samples `iterations` ride IDs.
-- For each strategy under test, computes shard ID and records timing.
-- Reports:
-  - `avg_ms`
-  - `p95_ms`
-  - `p99_ms`
-  - `max_ms`
-  - `lookups_per_second`
-  - sampled shard distribution
-
-What it does not do:
-- It does not measure full API latency.
-- It does not include network, serialization, DB query execution, or transaction overhead.
-- It should be treated as routing-logic overhead only.
-
-## 4) Commands Run (Relative to Root)
-
-Root directory for these commands: `CS432-Assignments`
-
-### A) Functional tests
 ```bash
-cd "Assignment 4/backend"
-../../venv/bin/python -m pytest tests/core/test_sharding_directory_strategy.py tests/api/routes/test_rides_sharding.py -q
+../..//.venv/Scripts/python.exe -c "from db.session import SessionLocal; from sqlalchemy import text; db=SessionLocal(); db.execute(text('DELETE FROM Ride_Shard_Range_Directory')); db.commit(); db.close(); print('Range rules cleared')"
+../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_baseline.json
+../..//.venv/Scripts/python.exe -m scripts.configure_ride_shard_ranges --replace --rule 1-2000:0 --rule 2001-4000:1 --rule 4001-*:2
+../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_with_ranges.json
+../..//.venv/Scripts/python.exe -m scripts.shard_key --source db --db-scope auto --entropy-output shard_key_entropy_comparison.json
+../..//.venv/Scripts/python.exe -m scripts.plot_shard_key_distribution --input shard_key_entropy_comparison.json --output ../../images/shard_key_policy_distribution.png
 ```
 
-Observed result:
-- `9 passed`
+Artifacts:
+- `Assignment 4/backend/scripts/shard_lookup_comparison_baseline.json`
+- `Assignment 4/backend/scripts/shard_lookup_comparison_with_ranges.json`
+- `Assignment 4/backend/scripts/shard_key_entropy_comparison.json`
+- `Assignment 4/images/shard_key_policy_distribution.png`
 
-### B) Benchmark run (baseline modulo-focused run)
-```bash
-cd "Assignment 4/backend"
-set -a && source .env >/dev/null 2>&1 && set +a
-../../venv/bin/python -m scripts.compare_shard_lookup_strategies --iterations 15000 --output shard_lookup_comparison_before_ranges.json
-```
+## 4) Lookup Strategy Benchmarks
 
-### C) Benchmark run (comparison with configured range rules, for evaluation only)
-```bash
-cd "Assignment 4/backend"
-set -a && source .env >/dev/null 2>&1 && set +a
-../../venv/bin/python -m scripts.configure_ride_shard_ranges --replace --rule 1-48:0 --rule 49-96:1 --rule 97-145:2
-../../venv/bin/python -m scripts.compare_shard_lookup_strategies --iterations 15000 --output shard_lookup_comparison_after_ranges.json
-```
+### Baseline (no range rules)
 
-Result artifacts:
-- `Assignment 4/backend/scripts/shard_lookup_comparison_before_ranges.json`
-- `Assignment 4/backend/scripts/shard_lookup_comparison_after_ranges.json`
+| Strategy | Avg (ms) | P95 (ms) | P99 (ms) | Max (ms) | Lookups/s | Normalized Entropy | Imbalance Spread |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `modulo` | 0.000234 | 0.000300 | 0.000500 | 0.031800 | 1,979,041.95 | 0.999938 | 190 |
+| `directory_exact_cache` | 0.000520 | 0.000900 | 0.001200 | 0.061200 | 1,154,054.77 | 0.999885 | 257 |
 
-## 5) Results (Formatted)
+### Range-enabled (3 rules active)
 
-Dataset size: `145` rides, iterations: `15000`
+Rules:
+- `1-2000 -> shard 0`
+- `2001-4000 -> shard 1`
+- `4001-* -> shard 2`
 
-### A) Baseline run (no range rules)
+| Strategy | Avg (ms) | P95 (ms) | P99 (ms) | Max (ms) | Lookups/s | Normalized Entropy | Imbalance Spread |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `modulo` | 0.000223 | 0.000300 | 0.000500 | 0.048900 | 2,079,391.15 | 0.999938 | 190 |
+| `directory_exact_cache` | 0.000402 | 0.000600 | 0.000900 | 0.032000 | 1,453,794.77 | 0.999885 | 257 |
+| `directory_range_cache` | 0.000438 | 0.000500 | 0.000700 | 0.028800 | 1,462,800.97 | 0.999960 | 138 |
 
-| Strategy | Avg (ms) | P95 (ms) | P99 (ms) | Max (ms) | Lookups/s |
-|---|---:|---:|---:|---:|---:|
-| `modulo` | 0.0001637 | 0.0002410 | 0.0002810 | 0.0197980 | 3,016,826 |
-| `directory_exact_cache` | 0.0001789 | 0.0002000 | 0.0002900 | 0.0065330 | 3,249,915 |
+## 5) Entropy-Based Shard-Key Comparison
 
-### B) Range-evaluation run (3 configured range rules)
+Entropy definition used:
 
-Rules used during evaluation:
-- `1-48 -> shard 0`
-- `49-96 -> shard 1`
-- `97-145 -> shard 2`
+$$
+H = -\sum_{i=0}^{2} p_i \log_2(p_i),\quad
+H_{max} = \log_2(3) \approx 1.5849625,\quad
+H_{normalized} = \frac{H}{H_{max}}
+$$
 
-| Strategy | Avg (ms) | P95 (ms) | P99 (ms) | Max (ms) | Lookups/s |
-|---|---:|---:|---:|---:|---:|
-| `modulo` | 0.0001242 | 0.0001810 | 0.0002110 | 0.0082150 | 3,941,409 |
-| `directory_exact_cache` | 0.0001723 | 0.0002310 | 0.0002900 | 0.0090570 | 3,418,314 |
-| `directory_range_cache` | 0.0002174 | 0.0002910 | 0.0004110 | 0.0073940 | 3,002,577 |
+Where $p_i$ is the fraction of rides assigned to shard $i$.
 
-## 6) Interpretation
+### Candidate key ranking (latest)
 
-- Modulo is consistently the lowest-overhead strategy in this microbenchmark.
-- Directory exact lookup is close, but still adds a metadata-map access layer.
-- Range-directory lookup has the highest overhead in this benchmark due to rule evaluation.
-- Since current goal is simple and fast routing, modulo is the default strategy for runtime.
-- The other modes stay in the codebase for controlled testing, migration, and comparison.
+| Candidate | Method | Counts (0/1/2) | Normalized Entropy | Imbalance Spread |
+|---|---|---:|---:|---:|
+| `ride_id_mod3` | `(RideID - 1) % 3` | 2000 / 2000 / 2000 | 1.000000 | 0 |
+| `route_pair_hash` | `md5(Start_GeoHash|End_GeoHash) % 3` | 2016 / 2003 / 1981 | 0.999976 | 35 |
+| `end_geohash_hash` | `md5(End_GeoHash) % 3` | 2038 / 1974 / 1988 | 0.999914 | 64 |
+| `start_geohash_hash` | `md5(Start_GeoHash) % 3` | 1949 / 2024 / 2027 | 0.999851 | 78 |
+| `host_plus_start_hash` | `md5(Host_MemberID|Start_GeoHash) % 3` | 2031 / 1941 / 2028 | 0.999801 | 90 |
+| `host_member_id_mod3` | `(Host_MemberID - 1) % 3` | 2018 / 2063 / 1919 | 0.999587 | 144 |
+| `vehicle_type_hash` | `md5(Vehicle_Type) % 3` | 1478 / 1486 / 3036 | 0.942542 | 1558 |
+| `ride_status_hash` | `md5(Ride_Status) % 3` | 6000 / 0 / 0 | 0.000000 | 6000 |
 
-## 7) Current Policy (for this phase)
+Distribution figure:
 
-- Use modulo lookup as the default operational strategy.
-- Keep exact-directory and range-directory machinery available behind `RIDE_SHARD_LOOKUP_MODE`.
-- If/when rebalancing becomes a requirement, switch the mode and re-run the same benchmark + API-level latency tests.
+![Shard distribution across candidate shard-key policies](images/shard_key_policy_distribution.png)
+
+## 6) Final Choice and Rationale
+
+### Chosen runtime shard key
+- `RideID` with deterministic modulo: `(RideID - 1) % 3`
+
+### Why this was selected
+- Highest throughput among tested lookup strategies.
+- Perfect shard-key balance on final dataset (entropy 1.0, spread 0).
+- Strong query alignment: `ride_id` is the dominant route and join handle in ride-centric endpoints.
+- Stable key after insertion, minimizing re-sharding churn.
+- Simpler and lower-overhead runtime path than metadata-dependent routing.
+
+### Why directory strategies are still kept
+- Exact directory is useful for migration overrides and controlled placement.
+- Range directory is useful for planned rebalancing experiments.
+- Both are operational tools, not default runtime routing.
+
+## 7) Notes
+
+- The `shard_key` script now supports live DB analysis with shard-aware scope selection.
+- Recommended invocation for production-like evaluation:
+  - `--source db --db-scope auto`
+- This prevents false conclusions when `MYSQL_PORT` points to one shard instance.
