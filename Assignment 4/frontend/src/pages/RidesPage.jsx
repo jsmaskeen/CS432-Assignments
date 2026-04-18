@@ -171,6 +171,7 @@ export default function RidesPage() {
 	const [locationLoading, setLocationLoading] = useState(false);
 	const [locationsCatalog, setLocationsCatalog] = useState([]);
 	const [activeMapPicker, setActiveMapPicker] = useState("booking");
+	const [creatingRide, setCreatingRide] = useState(false);
 	const [message, setMessage] = useState("");
 	const [userLocation, setUserLocation] = useState(null);
 
@@ -566,6 +567,9 @@ export default function RidesPage() {
 
 	async function handleCreateRide(event) {
 		event.preventDefault();
+		if (creatingRide) {
+			return;
+		}
 		if (!rideForm.start_geohash || !rideForm.end_geohash) {
 			setMessage("Select start and end from the suggestions or map first.");
 			return;
@@ -576,6 +580,7 @@ export default function RidesPage() {
 			);
 			return;
 		}
+		setCreatingRide(true);
 		setMessage("Creating ride...");
 		try {
 			await api.createRide({
@@ -593,6 +598,8 @@ export default function RidesPage() {
 			setRides(refreshed || []);
 		} catch (error) {
 			setMessage(error.message || "Ride creation failed");
+		} finally {
+			setCreatingRide(false);
 		}
 	}
 
@@ -1060,8 +1067,8 @@ export default function RidesPage() {
 											? `Host route distance (OSRM): ${hostingRouteDistanceKm} km`
 											: "Host route distance (OSRM): -"}
 								</p>
-								<button className="btn primary" type="submit">
-									Publish Ride
+								<button className="btn primary" type="submit" disabled={creatingRide || hostingDistanceLoading}>
+									{creatingRide ? "Publishing..." : "Publish Ride"}
 								</button>
 							</form>
 						</section>

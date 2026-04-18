@@ -172,6 +172,7 @@ def create_ride(
 
     ride_status = "Full" if available_seats == 0 else "Open"
     created_ride: Ride | None = None
+    response_payload: RideReadResponse | None = None
     created_booking_id: int | None = None
     created_participant_id: int | None = None
     created_message_id: int | None = None
@@ -222,6 +223,7 @@ def create_ride(
         shard_db.flush()
 
         created_ride = shard_ride
+        response_payload = RideReadResponse.model_validate(shard_ride)
         created_booking_id = shard_booking.BookingID
         created_participant_id = shard_participant.ParticipantID
         created_message_id = shard_message.MessageID
@@ -246,23 +248,57 @@ def create_ride(
         if not shard_on_primary:
             shard_db.close()
 
-    primary_db.commit()
+    try:
+        primary_db.commit()
+    except Exception as exc:
+        primary_db.rollback()
+        logger.exception("rides.create.primary_commit_failed ride_id=%s shard_id=%s", ride_id, shard_id)
+
+        if not shard_on_primary:
+            cleanup_db = SHARD_SESSION_MAKERS[shard_id]()
+            try:
+                cleanup_ride = cleanup_db.scalar(select(Ride).where(Ride.RideID == ride_id))
+                if cleanup_ride is not None:
+                    cleanup_db.query(RideChatMessage).where(RideChatMessage.RideID == ride_id).delete()
+                    cleanup_db.query(RideParticipant).where(RideParticipant.RideID == ride_id).delete()
+                    cleanup_db.query(Booking).where(Booking.RideID == ride_id).delete()
+                    cleanup_db.delete(cleanup_ride)
+                    cleanup_db.commit()
+            except Exception:
+                cleanup_db.rollback()
+                logger.exception(
+                    "rides.create.compensation_failed ride_id=%s shard_id=%s",
+                    ride_id,
+                    shard_id,
+                )
+            finally:
+                cleanup_db.close()
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ride creation failed to finalize",
+        ) from exc
+
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride_id, current_member.MemberID)
-    audit_event(
-        action="rides.create",
-        status="success",
-        actor_member_id=current_member.MemberID,
-        actor_username=None,
-        details={
-            "ride_id": ride_id,
-            "chat_message_id": created_message_id,
-            "host_booking_id": created_booking_id,
-            "host_participant_id": created_participant_id,
-        },
-    )
-    if created_ride is None:
+    try:
+        audit_event(
+            action="rides.create",
+            status="success",
+            actor_member_id=current_member.MemberID,
+            actor_username=None,
+            details={
+                "ride_id": ride_id,
+                "chat_message_id": created_message_id,
+                "host_booking_id": created_booking_id,
+                "host_participant_id": created_participant_id,
+            },
+        )
+    except Exception:
+        logger.exception("rides.create.audit_log_failed ride_id=%s", ride_id)
+
+    if created_ride is None or response_payload is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ride creation result missing")
-    return created_ride
+    return response_payload
 
 
 @router.patch("/{ride_id}", response_model=RideReadResponse)
