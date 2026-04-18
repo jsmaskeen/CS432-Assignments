@@ -9,22 +9,20 @@
 
 ---
 
-## 1. Project Objective and Scope
+## 1. Objective
 
-This assignment extends the existing ride-sharing backend with horizontal scaling through sharding. The implementation goal is to split ride-centric data across three shards and route requests correctly while preserving correctness, consistency of business logic, and acceptable query latency.
+We extend the existing ride-sharing backend with horizontal scaling through sharding. The idea is to split ride-centric data across three shards and route requests correctly while preserving, consistency of business logic, and acceptable query latency.
 
-The required technical pipeline was implemented and evaluated end-to-end:
+We explain the below in this report
 
 1. Shard key selection and justification.
 2. Data partitioning and migration into at least three shards.
 3. Query routing for lookups, inserts, and range-style access patterns.
 4. Scalability and trade-off analysis (consistency, availability, partition tolerance).
 
-The report is structured SubTask-wise as required by the assignment PDF.
-
 ---
 
-## 2. Environment and Execution Summary
+## 2. Environment
 
 ### 2.1 Shard Simulation Approach Used
 
@@ -34,9 +32,9 @@ The system uses multiple databases on the same server (simulated independent sha
 - shard 1: port 3308
 - shard 2: port 3309
 
-Shard engines and session factories are defined in backend/db/sharding.py.
+Shard engines and session factories are defined in `backend/db/sharding.py`.
 
-### 2.2 Pipeline Executed
+### 2.2 Pipeline 
 
 The full pipeline was executed in order:
 
@@ -51,39 +49,34 @@ The full pipeline was executed in order:
 
 ### 2.3 Dataset Size Used for Final Evaluation
 
-From generated artifacts:
-
-- rides_total: 6000
-- bookings_total: 13370
-- shard_count: 3
-- entropy source: live database with shard-scope aggregation
+- `rides_total`: 6000
+- `bookings_total`: 13370
+- `shard_count`: 3
 
 ---
 
 ## 3. SubTask 1: Shard Key Selection and Justification
 
-### 3.1 Selection Criteria from Assignment
+### 3.1 Selection Criteria
 
-The assignment asks the shard key to satisfy:
+The selected shard key should satisfy:
 
 1. High cardinality
 2. Query alignment
 3. Stability after insertion
 
-### 3.2 Partitioning Strategy Families Considered
+### 3.2 Partitioning Strategy Families
 
-Before selecting a concrete key formula, we evaluated all three strategy families required by the assignment.
+Before selecting a shard key formula, we evaluated all three strategy families required by the assignment.
 
 #### A) Range-Based Partitioning
 
-Definition:
-
-- Key ranges are assigned to shard IDs (for example, 1-2000 to shard 0, 2001-4000 to shard 1, and 4001+ to shard 2).
+Definition: Key ranges are assigned to shard IDs (for example, 1-2000 to shard 0, 2001-4000 to shard 1, and 4001+ to shard 2).
 
 What we implemented:
 
-- Range-rule support via Ride_Shard_Range_Directory and the configuration script.
-- Runtime evaluation support through directory_range lookup mode and strategy benchmarking.
+- Range-rule support via Ride_Shard_Range_Directory (a metadata table that stores `MinRideID`, `MaxRideID`, and target `ShardID`) and the configuration script.
+- Runtime evaluation support through `directory_range` lookup mode (router checks range rules first to pick shard) and strategy benchmarking.
 
 Advantages:
 
@@ -103,8 +96,8 @@ Definition:
 
 What we implemented:
 
-- Deterministic modulo on RideID: shard_id = (RideID - 1) % 3.
-- Additional hashed candidates for analysis (geohash, vehicle type, status, composite keys).
+- Deterministic modulo on RideID: `shard_id = (RideID - 1) % 3` (same input RideID always maps to the same shard without any directory lookup).
+- Additional hashed candidates for analysis (geohash, vehicle type, status, composite keys) where `md5(value) % 3` is used to test balance quality.
 
 Advantages:
 
@@ -124,8 +117,8 @@ Definition:
 
 What we implemented:
 
-- Exact directory: Ride_Shard_Directory for per-ride mapping.
-- Range directory: Ride_Shard_Range_Directory for key-range mapping.
+- Exact directory: Ride_Shard_Directory (one row per `RideID`, explicit mapping `RideID -> ShardID`).
+- Range directory: Ride_Shard_Range_Directory (one row per key interval, mapping `RideID range -> ShardID`).
 
 Advantages:
 
@@ -139,16 +132,7 @@ Limitations:
 
 #### Strategy-Level Outcome
 
-All three families were implemented and benchmarked. To make the decision evidence explicit, we re-ran the strategy benchmark scripts on the final migrated dataset (`ride_count=6000`, `iterations=20000`) and compared the three routing families.
-
-Commands used:
-
-```bash
-../..//.venv/Scripts/python.exe -c "from db.session import SessionLocal; from sqlalchemy import text; db=SessionLocal(); db.execute(text('DELETE FROM Ride_Shard_Range_Directory')); db.commit(); db.close()"
-../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_baseline.json
-../..//.venv/Scripts/python.exe -m scripts.configure_ride_shard_ranges --replace --rule 1-2000:0 --rule 2001-4000:1 --rule 4001-*:2
-../..//.venv/Scripts/python.exe -m scripts.compare_shard_lookup_strategies --iterations 20000 --output shard_lookup_comparison_with_ranges.json
-```
+All three families were implemented and we compared the three routing families.
 
 Strategy-family outcome tables:
 
@@ -186,6 +170,14 @@ The implementation does not rely on only one trial. It evaluates multiple candid
 - host_plus_start_hash: md5(Host_MemberID|Start_GeoHash) % 3
 - route_pair_hash: md5(Start_GeoHash|End_GeoHash) % 3
 
+How to read these candidate names:
+
+- `ride_id_mod3`: take `RideID`, apply modulo 3.
+- `host_member_id_mod3`: take host member id, apply modulo 3.
+- `*_hash`: hash the selected field(s), then apply modulo 3.
+- `host_plus_start_hash`: hash of `Host_MemberID` and `Start_GeoHash` combined.
+- `route_pair_hash`: hash of `(Start_GeoHash, End_GeoHash)` pair.
+
 ### 3.4 Entropy Metric and Why It Matters
 
 To quantify shard balance quality, entropy over 3 shards is used:
@@ -208,8 +200,6 @@ Interpretation:
 
 ### 3.5 Entropy Ranking Results on Final Dataset
 
-Using backend/scripts/shard_key_entropy_comparison.json:
-
 | Candidate | Method | Counts (0/1/2) | Normalized Entropy | Imbalance Spread |
 |---|---|---:|---:|---:|
 | ride_id_mod3 | (RideID - 1) % 3 | 2000 / 2000 / 2000 | 1.000000 | 0 |
@@ -227,7 +217,7 @@ The selected shard key is RideID with the deterministic mapping:
 
 shard_id = (RideID - 1) % 3
 
-This choice is justified by the assignment criteria and by comparison against the alternatives:
+This choice is justified by the criteria given  and by comparison against the alternatives:
 
 1. Compared with range-based routing:
 - Range policies are useful, but require ongoing rule maintenance and can skew as workload evolves.
