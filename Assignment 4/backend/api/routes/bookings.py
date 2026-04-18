@@ -36,8 +36,51 @@ def get_shard_session_for_ride(
 
 
 def _resolve_booking_ride_id(booking_id: int, primary_db: Session) -> int | None:
-    booking = primary_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
-    return booking.RideID if booking else None
+    for shard_id in sorted(SHARD_SESSION_MAKERS.keys()):
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            shard_ride_id = shard_db.scalar(select(Booking.RideID).where(Booking.BookingID == booking_id))
+            if shard_ride_id is not None:
+                return int(shard_ride_id)
+        finally:
+            shard_db.close()
+
+    booking_ride_id = primary_db.scalar(select(Booking.RideID).where(Booking.BookingID == booking_id))
+    if booking_ride_id is not None:
+        return int(booking_ride_id)
+
+    return None
+
+
+def _resolve_booking_shard_for_passenger(booking_id: int, passenger_member_id: int) -> int | None:
+    for shard_id in sorted(SHARD_SESSION_MAKERS.keys()):
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+            if booking is None:
+                continue
+            if int(booking.Passenger_MemberID) == passenger_member_id:
+                return shard_id
+        finally:
+            shard_db.close()
+    return None
+
+
+def _resolve_booking_shard_for_host(booking_id: int, host_member_id: int) -> int | None:
+    for shard_id in sorted(SHARD_SESSION_MAKERS.keys()):
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
+            if booking is None:
+                continue
+            ride = shard_db.scalar(select(Ride).where(Ride.RideID == booking.RideID))
+            if ride is None:
+                continue
+            if int(ride.Host_MemberID) == host_member_id:
+                return shard_id
+        finally:
+            shard_db.close()
+    return None
 
 
 @router.post("/{ride_id}/book", response_model=BookingReadResponse, status_code=status.HTTP_201_CREATED)
@@ -280,13 +323,11 @@ def list_confirmed_booking_stops(
 def delete_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    primary_db: Session = Depends(get_db_session),
 ) -> dict[str, str]:
-    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
-    if ride_id is None:
+    shard_id = _resolve_booking_shard_for_passenger(booking_id, current_member.MemberID)
+    if shard_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
@@ -345,13 +386,11 @@ def delete_booking(
 def accept_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    primary_db: Session = Depends(get_db_session),
 ) -> Booking:
-    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
-    if ride_id is None:
+    shard_id = _resolve_booking_shard_for_host(booking_id, current_member.MemberID)
+    if shard_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
@@ -416,13 +455,11 @@ def accept_booking(
 def reject_booking(
     booking_id: int,
     current_member: Member = Depends(get_current_member),
-    primary_db: Session = Depends(get_db_session),
 ) -> Booking:
-    ride_id = _resolve_booking_ride_id(booking_id, primary_db)
-    if ride_id is None:
+    shard_id = _resolve_booking_shard_for_host(booking_id, current_member.MemberID)
+    if shard_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
