@@ -61,6 +61,17 @@ The system uses multiple databases on the same server (simulated independent sha
 
 Shard engines and session factories are defined in \texttt{backend/db/sharding.py}.
 
+\subsection{How Shard Isolation is Achieved}
+
+The implementation uses multiple databases (not Docker containers) to represent independent shard nodes.
+Isolation is enforced by architecture and connection boundaries:
+\begin{itemize}
+    \item Each shard has a dedicated SQLAlchemy engine and session factory bound to its own host/port.
+    \item Single-ride requests resolve one \texttt{ShardID} and execute only on that shard session.
+    \item Cross-shard reads are explicit fan-out operations (query each shard, then merge), rather than implicit shared access.
+    \item Metadata directories (\texttt{Ride\_Shard\_Directory}, range directory, review directory) remain in the primary metadata database, separate from ride-data shards.
+\end{itemize}
+
 \subsection{Pipeline}
 
 The full pipeline was executed in order:
@@ -363,7 +374,18 @@ def shard_id_for_ride_id(ride_id: int) -> int:
 
 \subsection{Shard Tables and Data Layout}
 
-Ride-centric tables were partitioned across all three shards:
+Each shard database contains the physical SQL shard tables:
+\begin{itemize}
+    \item Members (mirrored subset needed for FK integrity)
+    \item Rides
+    \item Bookings
+    \item Ride\_Chat
+    \item Ride\_Participants
+    \item Reputation\_Reviews
+    \item Cost\_Settlements
+\end{itemize}
+
+Ride-centric rows were partitioned across all three shards:
 \begin{itemize}
     \item Rides
     \item Bookings
