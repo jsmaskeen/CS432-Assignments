@@ -1,0 +1,63 @@
+{
+  "ride_count": 6000,
+  "range_rule_count": 3,
+  "results": [
+    {
+      "strategy": "modulo",
+      "iterations": 20000,
+      "avg_ms": 0.00022275998780969531,
+      "p95_ms": 0.000300002284348011,
+      "p99_ms": 0.000500003807246685,
+      "max_ms": 0.048900023102760315,
+      "total_ms": 9.618200012482703,
+      "lookups_per_second": 2079391.151571352,
+      "sampled_distribution": {
+        "0": 6768,
+        "1": 6654,
+        "2": 6578
+      },
+      "entropy_bits": 1.5848636352413652,
+      "max_entropy_bits": 1.584962500721156,
+      "normalized_entropy": 0.9999376228271988,
+      "imbalance_spread": 190
+    },
+    {
+      "strategy": "directory_exact_cache",
+      "iterations": 20000,
+      "avg_ms": 0.00040161988290492444,
+      "p95_ms": 0.000600004568696022,
+      "p99_ms": 0.000900006853044033,
+      "max_ms": 0.03200001083314419,
+      "total_ms": 13.757099979557097,
+      "lookups_per_second": 1453794.7699529543,
+      "sampled_distribution": {
+        "0": 6685,
+        "1": 6786,
+        "2": 6529
+      },
+      "entropy_bits": 1.584780851199827,
+      "max_entropy_bits": 1.584962500721156,
+      "normalized_entropy": 0.9998853919122714,
+      "imbalance_spread": 257
+    },
+    {
+      "strategy": "directory_range_cache",
+      "iterations": 20000,
+      "avg_ms": 0.00043813998927362264,
+      "p95_ms": 0.000500003807246685,
+      "p99_ms": 0.000700005330145359,
+      "max_ms": 0.028799986466765404,
+      "total_ms": 13.67240003310144,
+      "lookups_per_second": 1462800.967758344,
+      "sampled_distribution": {
+        "0": 6617,
+        "1": 6755,
+        "2": 6628
+      },
+      "entropy_bits": 1.5848989888926797,
+      "max_entropy_bits": 1.584962500721156,
+      "normalized_entropy": 0.9999599284977105,
+      "imbalance_spread": 138
+    }
+  ]
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import random
 import string
+import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -95,14 +96,24 @@ def generate_data(
     chats_per_ride: int,
     reset_ride_data: bool,
     target_members: int,
+    log_every: int,
 ) -> None:
     db = SessionLocal()
     try:
+        started_at = time.perf_counter()
+        print(
+            "Starting fake data generation "
+            f"(rides={rides_count}, members_target={target_members}, max_passengers_per_ride={max_passengers_per_ride}, chats_per_ride={chats_per_ride})",
+            flush=True,
+        )
+
         if reset_ride_data:
+            print("Resetting existing ride-centric data...", flush=True)
             maybe_reset_ride_data(db)
             db.flush()
 
         member_ids = ensure_members_and_auth(db, target_members)
+        print(f"Members available={len(member_ids)}", flush=True)
 
         now = datetime.now(UTC)
         created_rides = 0
@@ -112,7 +123,7 @@ def generate_data(
         created_reviews = 0
         created_settlements = 0
 
-        for _ in range(rides_count):
+        for ride_index in range(1, rides_count + 1):
             host_id = random.choice(member_ids)
             max_capacity = random.randint(2, 5)
             available_seats = max_capacity - 1
@@ -217,9 +228,22 @@ def generate_data(
                 db.add(chat)
                 created_chats += 1
 
-        db.commit()
+            if ride_index % log_every == 0 or ride_index == rides_count:
+                elapsed = time.perf_counter() - started_at
+                progress_pct = (ride_index / rides_count * 100.0) if rides_count > 0 else 100.0
+                print(
+                    "progress "
+                    f"rides={ride_index}/{rides_count} ({progress_pct:.1f}%) "
+                    f"bookings={created_bookings} participants={created_participants} "
+                    f"chats={created_chats} reviews={created_reviews} settlements={created_settlements} "
+                    f"elapsed_s={elapsed:.1f}",
+                    flush=True,
+                )
 
-        print("Fake data generation complete")
+        db.commit()
+        elapsed = time.perf_counter() - started_at
+
+        print(f"Fake data generation complete in {elapsed:.1f}s", flush=True)
         print(f"rides_created={created_rides}")
         print(f"bookings_created={created_bookings}")
         print(f"participants_created={created_participants}")
@@ -250,6 +274,7 @@ def main() -> None:
         help="Delete existing ride-centric data before generating fresh fake data",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--log-every", type=int, default=250, help="Print progress every N rides")
 
     args = parser.parse_args()
     random.seed(args.seed)
@@ -260,6 +285,7 @@ def main() -> None:
         chats_per_ride=max(0, args.chats_per_ride),
         reset_ride_data=args.reset_ride_data,
         target_members=max(2, args.members),
+        log_every=max(1, args.log_every),
     )
 
 
