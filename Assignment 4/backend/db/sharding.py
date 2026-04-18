@@ -14,7 +14,7 @@ VALID_SHARD_IDS = (0, 1, 2)
 
 def shard_id_for_ride_id(ride_id: int) -> int:
     if ride_id <= 0:
-        raise ValueError(f"ride_id must be positive, got {ride_id}")
+        raise ValueError(f"ride _id must be positive, got {ride_id}")
     return (ride_id - 1) % NUM_SHARDS
 
 
