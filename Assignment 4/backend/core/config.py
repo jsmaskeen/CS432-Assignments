@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     SHARD_DB_USER: str = ""
     SHARD_DB_PASSWORD: str = ""
     SHARD_DB_NAME: str = ""
+    RIDE_SHARD_LOOKUP_MODE: str = "modulo"
 
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"

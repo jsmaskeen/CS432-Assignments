@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -9,8 +10,9 @@ from api.dependencies import get_current_member
 from core.audit import audit_event
 from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km, recalculate_ride_route_and_distances
+from core.sharding import get_ride_shard_id
 from db.session import get_db_session
-from db.sharding import SHARD_SESSION_MAKERS, shard_id_for_ride_id
+from db.sharding import SHARD_SESSION_MAKERS
 from models.booking import Booking
 from models.member import Member
 from models.ride import Ride
@@ -21,8 +23,11 @@ router = APIRouter(prefix="/rides", tags=["bookings"])
 logger = logging.getLogger("rajak.bookings")
 
 
-def get_shard_session_for_ride(ride_id: int):
-    shard_id = shard_id_for_ride_id(ride_id)
+def get_shard_session_for_ride(
+    ride_id: int,
+    primary_db: Session = Depends(get_db_session),
+):
+    shard_id = get_ride_shard_id(ride_id, primary_db)
     db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         yield db
@@ -158,10 +163,31 @@ def create_booking(
 
 
 @router.get("/my/bookings", response_model=list[BookingReadResponse])
-def my_bookings(current_member: Member = Depends(get_current_member), db: Session = Depends(get_db_session)) -> list[Booking]:
+def my_bookings(current_member: Member = Depends(get_current_member)) -> list[Booking]:
     logger.info("bookings.my.list member_id=%s", current_member.MemberID)
-    stmt = select(Booking).where(Booking.Passenger_MemberID == current_member.MemberID).order_by(Booking.Booked_At.desc())
-    return list(db.scalars(stmt))
+    shard_ids = sorted(SHARD_SESSION_MAKERS.keys())
+
+    def _fetch_member_bookings_for_shard(shard_id: int) -> list[Booking]:
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+        try:
+            stmt = (
+                select(Booking)
+                .where(Booking.Passenger_MemberID == current_member.MemberID)
+                .order_by(Booking.Booked_At.desc(), Booking.BookingID.desc())
+            )
+            return list(shard_db.scalars(stmt))
+        finally:
+            shard_db.close()
+
+    bookings: list[Booking] = []
+    max_workers = max(1, len(shard_ids))
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bookings-my-shard") as executor:
+        futures = [executor.submit(_fetch_member_bookings_for_shard, shard_id) for shard_id in shard_ids]
+        for future in futures:
+            bookings.extend(future.result())
+
+    bookings.sort(key=lambda booking: (booking.Booked_At, booking.BookingID), reverse=True)
+    return bookings
 
 
 @router.get("/{ride_id}/bookings/pending", response_model=list[BookingReadResponse])
@@ -260,7 +286,7 @@ def delete_booking(
     if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = shard_id_for_ride_id(ride_id)
+    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
@@ -325,7 +351,7 @@ def accept_booking(
     if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = shard_id_for_ride_id(ride_id)
+    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))
@@ -396,7 +422,7 @@ def reject_booking(
     if ride_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    shard_id = shard_id_for_ride_id(ride_id)
+    shard_id = get_ride_shard_id(ride_id, primary_db)
     shard_db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         booking = shard_db.scalar(select(Booking).where(Booking.BookingID == booking_id))

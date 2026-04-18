@@ -1,0 +1,51 @@
+{
+  "ride_count": 145,
+  "range_rule_count": 3,
+  "results": [
+    {
+      "strategy": "modulo",
+      "iterations": 15000,
+      "avg_ms": 0.00012421813880791888,
+      "p95_ms": 0.000181000359589234,
+      "p99_ms": 0.00021099913283251226,
+      "max_ms": 0.008214999979827553,
+      "total_ms": 3.805746000580257,
+      "lookups_per_second": 3941408.595768864,
+      "sampled_distribution": {
+        "0": 5073,
+        "1": 4958,
+        "2": 4969
+      }
+    },
+    {
+      "strategy": "directory_exact_cache",
+      "iterations": 15000,
+      "avg_ms": 0.0001722700688939464,
+      "p95_ms": 0.00023099892132449895,
+      "p99_ms": 0.00028999966161791235,
+      "max_ms": 0.009057001079781912,
+      "total_ms": 4.388127999845892,
+      "lookups_per_second": 3418314.1422781628,
+      "sampled_distribution": {
+        "0": 5064,
+        "1": 4954,
+        "2": 4982
+      }
+    },
+    {
+      "strategy": "directory_range_cache",
+      "iterations": 15000,
+      "avg_ms": 0.00021736619370737268,
+      "p95_ms": 0.0002910001057898626,
+      "p99_ms": 0.00041100065573118627,
+      "max_ms": 0.007394000931526534,
+      "total_ms": 4.995707999114529,
+      "lookups_per_second": 3002577.4129830436,
+      "sampled_distribution": {
+        "0": 4918,
+        "1": 5041,
+        "2": 5041
+      }
+    }
+  ]
+}

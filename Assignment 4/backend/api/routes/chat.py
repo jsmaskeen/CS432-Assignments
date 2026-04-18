@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_member
 from core.audit import audit_event
+from core.sharding import get_ride_shard_id
 from core.security import decode_access_token
-from db.session import get_db_session
-from db.session import SessionLocal
+from db.session import SessionLocal, get_db_session
+from db.sharding import SHARD_SESSION_MAKERS
 from models.booking import Booking
 from models.chat_message import RideChatMessage
 from models.member import Member
@@ -48,6 +49,18 @@ class _ChatConnectionManager:
 connection_manager = _ChatConnectionManager()
 
 
+def get_shard_session_for_ride(
+    ride_id: int,
+    primary_db: Session = Depends(get_db_session),
+):
+    shard_id = get_ride_shard_id(ride_id, primary_db)
+    db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def _ensure_chat_member(ride_id: int, member_id: int, db: Session) -> Ride:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -74,16 +87,19 @@ def _ensure_chat_member(ride_id: int, member_id: int, db: Session) -> Ride:
 def list_chat_messages(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
+    primary_db: Session = Depends(get_db_session),
 ) -> list[dict[str, object]]:
     _ensure_chat_member(ride_id, current_member.MemberID, db)
     stmt = select(RideChatMessage).where(RideChatMessage.RideID == ride_id).order_by(RideChatMessage.Sent_At.asc())
     messages = list(db.scalars(stmt))
     member_ids = {message.Sender_MemberID for message in messages}
-    members = {
-        member.MemberID: member
-        for member in db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
-    }
+    members = {}
+    if member_ids:
+        members = {
+            member.MemberID: member
+            for member in primary_db.scalars(select(Member).where(Member.MemberID.in_(member_ids)))
+        }
     response = []
     for message in messages:
         member = members.get(message.Sender_MemberID)
@@ -113,11 +129,15 @@ async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
         return
 
     member_id = int(subject)
-    db = SessionLocal()
+    primary_db = SessionLocal()
+    shard_db: Session | None = None
     try:
-        member = db.scalar(select(Member).where(Member.MemberID == member_id))
+        member = primary_db.scalar(select(Member).where(Member.MemberID == member_id))
         sender_name = member.Full_Name if member else None
-        _ensure_chat_member(ride_id, member_id, db)
+        shard_id = get_ride_shard_id(ride_id, primary_db)
+        shard_db = SHARD_SESSION_MAKERS[shard_id]()
+
+        _ensure_chat_member(ride_id, member_id, shard_db)
         await connection_manager.connect(ride_id, websocket)
         while True:
             raw = await websocket.receive_text()
@@ -140,9 +160,9 @@ async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
                 Sender_MemberID=member_id,
                 Message_Body=message_body,
             )
-            db.add(message)
-            db.commit()
-            db.refresh(message)
+            shard_db.add(message)
+            shard_db.commit()
+            shard_db.refresh(message)
             audit_event(
                 action="chat.create",
                 status="success",
@@ -168,4 +188,6 @@ async def ride_chat_ws(websocket: WebSocket, ride_id: int) -> None:
         await websocket.close(code=1008)
     finally:
         connection_manager.disconnect(ride_id, websocket)
-        db.close()
+        if shard_db is not None:
+            shard_db.close()
+        primary_db.close()

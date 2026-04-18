@@ -15,8 +15,12 @@
 
 Endpoints to Refactor:
 - [x] Single-ride operations
+  - [x] `POST /api/v1/rides` : write to shard
   - [x] `GET /api/v1/rides/{ride_id}` : read from shard
   - [x] `PATCH /api/v1/rides/{ride_id}` : write to shard
+  - [x] `POST /api/v1/rides/{ride_id}/start` : write to shard
+  - [x] `POST /api/v1/rides/{ride_id}/end` : write + settlements on shard
+  - [x] `DELETE /api/v1/rides/{ride_id}` : delete on shard
   - [x] `GET /api/v1/rides/{ride_id}/with-bookings` : read from shard
   
 - [x] Booking endpoints (core operations)
@@ -24,10 +28,11 @@ Endpoints to Refactor:
   - [x] `DELETE /api/v1/bookings/{booking_id}` : resolve via Rides.RideID : shard
   - [x] `POST /api/v1/bookings/{booking_id}/accept` : resolve via Rides.RideID : shard
   - [x] `POST /api/v1/bookings/{booking_id}/reject` : resolve via Rides.RideID : shard
+  - [x] `GET /api/v1/bookings/my/bookings` : fan-out reads across shards + global merge sort
   
-- [ ] Chat endpoints
-  - [ ] `POST /api/v1/rides/{ride_id}/messages` : write to shard
-  - [ ] `GET /api/v1/rides/{ride_id}/messages` : read from shard
+- [x] Chat endpoints
+  - [x] `GET /api/v1/chat/ride/{ride_id}` : read from shard
+  - [x] `WS /api/v1/chat/ws/ride/{ride_id}` : membership checks + writes on shard
   
 - [ ] Review endpoints
   - [ ] `POST /api/v1/rides/{ride_id}/reviews` : write to shard
@@ -37,16 +42,18 @@ Endpoints to Refactor:
   - [ ] Rides-related settlement operations : route via RideID
 
 Multi-Shard Operations:
-- [ ] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
+- [x] `GET /api/v1/rides` (list all) : fan-out to 3 shards, merge by RideID
+- [x] Admin ride listings + stats : fan-out/aggregate across shards
+- [x] Parallel shard fan-out (thread pool) for rides list/stats + my bookings
 - [ ] Range queries : cross-shard aggregation
 
 > Extract and generalize multi-shard fan-out + merge logic into reusable utilities.
 
 Utilities to Create:
-- [ ] `list_rides_across_shards(filter, sort)` : queries all 3 shards, merges results
+- [x] `list_rides_across_shards(filter, sort)` : queries all 3 shards, merges results
 - [ ] `list_bookings_by_ride_range(start_ride_id, end_ride_id)` : cross-shard aggregation
 - [ ] Generic merge/dedup helper for common operations
-- [ ] Integrate into main endpoints (e.g., `GET /rides` route)
+- [x] Integrate into main endpoints (e.g., `GET /rides` route)
 
 > Execute complete workflow with validation.
 
@@ -58,6 +65,8 @@ Utilities to Create:
 - [ ] Test Phase 3 endpoints (cross-shard operations)
 - [ ] Verify data isolation (confirm rides in shard_0 stay in shard_0)
 - [ ] Performance baseline: Monitor query latency before/after sharding
+
+- [ ] Add automated tests for shard utilities + ride/admin shard routes
 
 - [ ] Create orchestration script (run all steps with one command)
 - [ ] Load test across shards (concurrent operations)

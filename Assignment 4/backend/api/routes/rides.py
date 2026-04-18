@@ -10,8 +10,10 @@ from api.dependencies import get_current_admin_credential, get_current_member
 from core.audit import audit_event
 from core.chaos import consume_failure
 from core.routing import calculate_booking_distance_km
+from core.sharding import get_or_create_ride_shard_id, get_ride_shard_id
+from core.shard_queries import list_rides_across_shards
 from db.session import get_db_session
-from db.sharding import SHARD_SESSION_MAKERS, shard_id_for_ride_id
+from db.sharding import SHARD_SESSION_MAKERS
 from models.booking import Booking
 from models.auth_credential import AuthCredential
 from models.ride_participant import RideParticipant
@@ -25,8 +27,11 @@ router = APIRouter(prefix="/rides", tags=["rides"])
 logger = logging.getLogger("rajak.rides")
 
 
-def get_shard_session_for_ride(ride_id: int):
-    shard_id = shard_id_for_ride_id(ride_id)
+def get_shard_session_for_ride(
+    ride_id: int,
+    primary_db: Session = Depends(get_db_session),
+):
+    shard_id = get_ride_shard_id(ride_id, primary_db)
     db = SHARD_SESSION_MAKERS[shard_id]()
     try:
         yield db
@@ -38,15 +43,10 @@ def get_shard_session_for_ride(ride_id: int):
 def list_rides(
     only_open: bool = Query(default=True),
     limit: int = Query(default=25, ge=1, le=100),
-    db: Session = Depends(get_db_session),
 ) -> list[Ride]:
     logger.info("rides.list only_open=%s limit=%s", only_open, limit)
-    stmt = select(Ride).order_by(Ride.Departure_Time.asc()).limit(limit)
-    if only_open:
-        stmt = stmt.where(Ride.Ride_Status == "Open")
-    else:
-        stmt = stmt.where(Ride.Ride_Status.in_(["Open", "Full"]))
-    return list(db.scalars(stmt))
+    statuses = ("Open",) if only_open else ("Open", "Full")
+    return list_rides_across_shards(statuses=statuses, limit=limit, order_desc=False)
 
 
 @router.get("/{ride_id}", response_model=RideReadResponse)
@@ -128,6 +128,8 @@ def create_ride(
     )
     db.add(ride)
     db.flush()
+    shard_id = get_or_create_ride_shard_id(ride.RideID, db)
+
     host_booking = Booking(
         RideID=ride.RideID,
         Passenger_MemberID=current_member.MemberID,
@@ -149,6 +151,65 @@ def create_ride(
     db.add(host_booking)
     db.add(host_participant)
     db.add(message)
+    db.flush()
+
+    shard_db = SHARD_SESSION_MAKERS[shard_id]()
+    try:
+        shard_ride = Ride(
+            RideID=ride.RideID,
+            Host_MemberID=ride.Host_MemberID,
+            Start_GeoHash=ride.Start_GeoHash,
+            End_GeoHash=ride.End_GeoHash,
+            Departure_Time=ride.Departure_Time,
+            Vehicle_Type=ride.Vehicle_Type,
+            Max_Capacity=ride.Max_Capacity,
+            Available_Seats=ride.Available_Seats,
+            Base_Fare_Per_KM=ride.Base_Fare_Per_KM,
+            Ride_Status=ride.Ride_Status,
+        )
+        shard_booking = Booking(
+            BookingID=host_booking.BookingID,
+            RideID=host_booking.RideID,
+            Passenger_MemberID=host_booking.Passenger_MemberID,
+            Booking_Status=host_booking.Booking_Status,
+            Pickup_GeoHash=host_booking.Pickup_GeoHash,
+            Drop_GeoHash=host_booking.Drop_GeoHash,
+            Distance_Travelled_KM=host_booking.Distance_Travelled_KM,
+        )
+        shard_participant = RideParticipant(
+            ParticipantID=host_participant.ParticipantID,
+            RideID=host_participant.RideID,
+            MemberID=host_participant.MemberID,
+            Role=host_participant.Role,
+        )
+        shard_message = RideChatMessage(
+            MessageID=message.MessageID,
+            RideID=message.RideID,
+            Sender_MemberID=message.Sender_MemberID,
+            Message_Body=message.Message_Body,
+        )
+
+        shard_db.add(shard_ride)
+        shard_db.add(shard_booking)
+        shard_db.add(shard_participant)
+        shard_db.add(shard_message)
+        shard_db.commit()
+    except IntegrityError as exc:
+        shard_db.rollback()
+        db.rollback()
+        logger.exception("rides.create.shard_conflict ride_id=%s shard_id=%s", ride.RideID, shard_id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ride creation conflict on shard") from exc
+    except Exception as exc:
+        shard_db.rollback()
+        db.rollback()
+        logger.exception("rides.create.shard_write_failed ride_id=%s shard_id=%s", ride.RideID, shard_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ride creation failed on shard",
+        ) from exc
+    finally:
+        shard_db.close()
+
     db.commit()
     db.refresh(ride)
     logger.info("rides.create.success ride_id=%s host_member_id=%s", ride.RideID, current_member.MemberID)
@@ -248,7 +309,7 @@ def update_ride(
 def start_ride(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> Ride:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -292,7 +353,7 @@ def get_ride_with_bookings(
 def end_ride(
     ride_id: int,
     current_member: Member = Depends(get_current_member),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> Ride:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
@@ -354,7 +415,7 @@ def end_ride(
 def delete_ride(
     ride_id: int,
     admin_credential: AuthCredential = Depends(get_current_admin_credential),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_shard_session_for_ride),
 ) -> dict[str, str]:
     ride = db.scalar(select(Ride).where(Ride.RideID == ride_id))
     if ride is None:
